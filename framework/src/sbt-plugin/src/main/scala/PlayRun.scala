@@ -22,6 +22,47 @@ import com.typesafe.sbt.packager.Keys._
 import com.typesafe.sbt.web.SbtWeb.autoImport._
 import play.runsupport.{ PlayWatchService, AssetsClassLoader }
 import play.sbtplugin.run._
+import play.runsupport.protocol.PlayForkSupportResult
+
+object SbtSerializers {
+  import play.api.libs.json._
+  import play.api.libs.functional.syntax._
+  import play.api.data.validation.ValidationError
+  import sbt.protocol._
+
+ def fileFromString(s: String): Option[java.io.File] =
+    try Some(new java.io.File(new java.net.URI(s)))
+    catch {
+      case e: Exception => None
+    }
+  def fileToString(f: java.io.File): String =
+    f.toURI.toASCIIString
+  implicit val fileReads = Reads[java.io.File] { j =>
+    j.validate[String].flatMap(x =>
+      fileFromString(x).map(JsSuccess(_)).getOrElse(JsError(s"Invalid filename $x")))
+  }
+  implicit val fileWrites = Writes[java.io.File](f => JsString(fileToString(f)))
+
+  implicit def tuple2Reads[A,B](implicit aReads:Reads[A], bReads:Reads[B]):Reads[(A,B)] = Reads[(A,B)] { i =>
+    i.validate[JsArray].flatMap{ arr =>
+      val s = aReads.reads(arr(0))
+      val f = bReads.reads(arr(1))
+      (s,f) match {
+        case (JsSuccess(a,_),JsSuccess(b,_)) => JsSuccess((a,b))
+        case (a @ JsError(_),JsSuccess(_,_)) => a
+        case (JsSuccess(_,_),b @ JsError(_)) => b
+        case (a @ JsError(_),b @ JsError(_)) => a ++ b
+      }
+    }
+  }
+
+  implicit def tuple2Writes[A,B](implicit aWrites:Writes[A], bWrites:Writes[B]):Writes[(A,B)] =
+    Writes[(A,B)] { case (s,f) => JsArray(Seq(aWrites.writes(s),bWrites.writes(f))) }
+
+  implicit val playForkSupportResultWrites:Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
+  implicit val playForkSupportResultReads:Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
+  implicit val playForkSupportResultFormat:Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads,playForkSupportResultWrites)
+}
 
 /**
  * Provides mechanisms for running a Play application in SBT
@@ -82,6 +123,41 @@ trait PlayRun extends PlayInternalKeys {
   val playDefaultRunTask = playRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
     playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
 
+  def playRunForked(logger:Logger,
+                    baseDirectory:File,
+                    projectDirectory:File,
+                    projectRef:ProjectRef,
+                    javaOptions: Seq[String],
+                    dependencyClasspath: Classpath,
+                    monitoredFiles: Seq[String],
+                    targetDirectory: File,
+                    docsClasspath: Classpath,
+                    defaultHttpPort: Int,
+                    pollDelayMillis: Int,
+                    args: Seq[String]):Unit = {
+
+    logger.debug(s"baseDirectory: $baseDirectory")
+    logger.debug(s"projectDirectory: $projectDirectory")
+    logger.debug(s"projectRef: $projectRef")
+    logger.debug(s"javaOptions: $javaOptions")
+    logger.debug(s"dependencyClasspath: $dependencyClasspath")
+    logger.debug(s"monitoredFiles: $monitoredFiles")
+    logger.debug(s"targetDirectory: $targetDirectory")
+    logger.debug(s"docsClasspath: $docsClasspath")
+    logger.debug(s"defaultHttpPort: $defaultHttpPort")
+    logger.debug(s"pollDelayMillis: $pollDelayMillis")
+    logger.debug(s"args: $args")
+
+    val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
+                                    runJVMOptions = javaOptions)
+    val runner = new ForkRun(runnerOptions)
+    val baseDirectoryString = baseDirectory.getAbsolutePath()
+    val buildUriString = projectRef.build.toString
+    val project = projectRef.project
+
+    runner.run("play.sbtclient.ForkRunner", dependencyClasspath.map(_.data), Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+  }
+
   /**
    * This method is public API, used by sbt-echo, which is used by Activator:
    *
@@ -96,62 +172,150 @@ trait PlayRun extends PlayInternalKeys {
     assetsClassLoader: TaskKey[ClassLoader => ClassLoader]): Def.Initialize[InputTask[Unit]] = Def.inputTask {
 
     val args = Def.spaceDelimited().parsed
-
+    val forkInRun = (Keys.fork in Keys.run).value
     val state = Keys.state.value
     val interaction = playInteractionMode.value
 
-    lazy val devModeServer = startDevMode(
-      state,
-      runHooks.value,
-      (javaOptions in Runtime).value,
-      dependencyClasspath.value,
-      dependencyClassLoader.value,
-      reloaderClasspath,
-      reloaderClassLoader.value,
-      assetsClassLoader.value,
-      playCommonClassloader.value,
-      playMonitoredFiles.value,
-      playWatchService.value,
-      (managedClasspath in DocsApplication).value,
-      interaction,
-      playDefaultPort.value,
-      args
-    )
+    if (forkInRun) {
+      val extracted = Project.extract(state)
+      playRunForked(
+        state.log,
+        (Keys.baseDirectory in ThisBuild).value,
+        (Keys.baseDirectory in ThisProject).value,
+        extracted.currentRef,
+        (javaOptions in Runtime).value,
+        dependencyClasspath.value,
+        playMonitoredFiles.value,
+        target.value,
+        (managedClasspath in DocsApplication).value,
+        playDefaultPort.value,
+        pollInterval.value,
+        args
+      )
+    } else {
+      lazy val devModeServer = startDevMode(
+        state,
+        runHooks.value,
+        (javaOptions in Runtime).value,
+        dependencyClasspath.value,
+        dependencyClassLoader.value,
+        reloaderClasspath,
+        reloaderClassLoader.value,
+        assetsClassLoader.value,
+        playCommonClassloader.value,
+        playMonitoredFiles.value,
+        playWatchService.value,
+        (managedClasspath in DocsApplication).value,
+        interaction,
+        playDefaultPort.value,
+        args
+      )
 
-    interaction match {
-      case nonBlocking: PlayNonBlockingInteractionMode =>
-        nonBlocking.start(devModeServer)
-      case blocking =>
-        devModeServer
+      interaction match {
+        case nonBlocking: PlayNonBlockingInteractionMode =>
+          nonBlocking.start(devModeServer)
+        case blocking =>
+          devModeServer
 
-        println()
-        println(Colors.green("(Server started, use Ctrl+D to stop and go back to the console...)"))
-        println()
+          println()
+          println(Colors.green("(Server started, use Ctrl+D to stop and go back to the console...)"))
+          println()
 
-        // If we have both Watched.Configuration and Watched.ContinuousState
-        // attributes and if Watched.ContinuousState.count is 1 then we assume
-        // we're in ~ run mode
-        val maybeContinuous = for {
-          watched <- state.get(Watched.Configuration)
-          watchState <- state.get(Watched.ContinuousState)
-          if watchState.count == 1
-        } yield watched
+          // If we have both Watched.Configuration and Watched.ContinuousState
+          // attributes and if Watched.ContinuousState.count is 1 then we assume
+          // we're in ~ run mode
+          val maybeContinuous = for {
+            watched <- state.get(Watched.Configuration)
+            watchState <- state.get(Watched.ContinuousState)
+            if watchState.count == 1
+          } yield watched
 
-        maybeContinuous match {
-          case Some(watched) =>
-            // ~ run mode
-            interaction doWithoutEcho {
-              twiddleRunMonitor(watched, state, devModeServer.buildLink, Some(WatchState.empty))
-            }
-          case None =>
-            // run mode
-            interaction.waitForCancel()
-        }
+          maybeContinuous match {
+            case Some(watched) =>
+              // ~ run mode
+              interaction doWithoutEcho {
+                twiddleRunMonitor(watched, state, devModeServer.buildLink, Some(WatchState.empty))
+              }
+            case None =>
+              // run mode
+              interaction.waitForCancel()
+          }
 
-        devModeServer.close()
-        println()
+          devModeServer.close()
+          println()
+      }
     }
   }
+
+  val playDefaultForkRunSupportTask = playForkRunSupportTask(playReload in Compile, playDependencyClasspath, playReloaderClasspath)
+
+  def findCompilationFailure(in:Throwable):Option[xsbti.CompileFailed] = in match {
+    case null => None
+    case Incomplete(_ , _, _, causes, directCause) =>
+      (causes.foldLeft[Option[xsbti.CompileFailed]](None) {
+        case (None,v) => findCompilationFailure(v)
+        case (x, _) => x
+      }) orElse directCause.flatMap {
+        case x: xsbti.CompileFailed => Some(x)
+        case _ => None
+      }
+    case x: xsbti.CompileFailed => Some(x)
+    case x: Throwable => findCompilationFailure(x.getCause)
+  }
+
+  /**
+   * This method is public API, used by sbt-echo, which is used by Activator:
+   *
+   * https://github.com/typesafehub/sbt-echo/blob/v0.1.3/play/src/main/scala-sbt-0.13/com/typesafe/sbt/echo/EchoPlaySpecific.scala#L20
+   *
+   * Do not change its signature without first consulting the Activator team.  Do not change its signature in a minor
+   * release.
+   */
+  def playForkRunSupportTask(compile:TaskKey[sbt.inc.Analysis], dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[Task[PlayForkSupportResult]] = Def.task {
+    val state = Keys.state.value
+    val log = state.log
+
+    log.info("+++++++++++++++++++++++++++++++++++++++++++++")
+    log.info(s"playForkRunSupportTask($compile, $dependencyClasspath, $reloaderClasspath)")
+    log.info("+++++++++++++++++++++++++++++++++++++++++++++")
+
+    val compileResultEither = compile.result.value.toEither
+    val dependencyClasspathResultEither = dependencyClasspath.result.value.toEither
+    val reloaderClasspathResultEither = reloaderClasspath.result.value.toEither
+    val playAllAssetsResultEither = playAllAssets.result.value.toEither
+    val playMonitoredFilesResultEither = playMonitoredFiles.result.value.toEither
+    val docsResultEither = (managedClasspath in DocsApplication).result.value.toEither
+
+    (compileResultEither,
+     dependencyClasspathResultEither,
+     reloaderClasspathResultEither,
+     playAllAssetsResultEither,
+     playMonitoredFilesResultEither,
+     docsResultEither) match {
+      case (Right(compileValue),Right(dependencyClasspathValue),Right(reloaderClasspathValue),Right(playAllAssetsValue),Right(playMonitoredFilesValue),Right(docsValue)) =>
+        PlayForkSupportResult(sbt.server.SbtToProtocolUtils.analysisToProtocol(compileValue),
+                              dependencyClasspathValue.map(_.data),
+                              reloaderClasspathValue.map(_.data),
+                              playAllAssetsValue,
+                              playMonitoredFilesValue,
+                              devSettings.value,
+                              docsValue.map(_.data))
+      case (Left(i),_,_,_,_,_) =>
+        val ex = findCompilationFailure(i)
+        log.info("------------------------------")
+        log.info(s"Compile failed: $i => $ex")
+        log.info("------------------------------")
+        if (ex.isDefined) throw ex.get
+        else throw i
+      case (_,_,_,_,_,_) =>
+        log.info("------------------------------")
+        log.info(s"Something else went wrong!!!!!")
+        log.info("------------------------------")
+        throw new Exception("WFT?")
+    }
+
+  }
+
 
   /**
    * Monitor changes in ~run mode.
