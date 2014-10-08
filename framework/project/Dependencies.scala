@@ -5,6 +5,7 @@ import sbt._
 
 object Dependencies {
 
+  val sbtRcVersion = "1.0-c327018be6eda3f2ac00f0777f0701fcee9cbf70"
   // Some common dependencies here so they don't need to be declared over and over
   val specsVersion = "2.3.12"
   val specsBuild = Seq(
@@ -127,7 +128,7 @@ object Dependencies {
 
   val runSupportDependencies = Seq(
     "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion,
-    "com.typesafe.sbtrc" % "client-2-10" % "1.0-678a1d91f2b05395b14c7f190b736db599c4353c"
+    "com.typesafe.sbtrc" % "client-2-10" % sbtRcVersion
   ) ++ specsBuild.map(_ % Test)
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
@@ -161,7 +162,7 @@ object Dependencies {
     sbtPluginDep("com.typesafe.sbt" % "sbt-webdriver" % "1.0.0")
   ) ++ specsSbt.map(_ % "test")
 
-  val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % "1.0-678a1d91f2b05395b14c7f190b736db599c4353c"
+  val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
 
   val sbtDependencies = Seq(
     "org.scala-lang" % "scala-reflect" % BuildSettings.buildScalaVersionForSbt % "provided",
