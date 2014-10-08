@@ -173,6 +173,11 @@ trait PlaySettings {
 
     playReload <<= playReloadTask,
 
+    playDefaultForkRunSupport <<= playDefaultForkRunSupportTask,
+
+    UIKeys.registeredFormats in ThisProject <<= (UIKeys.registeredFormats in Global) ?? Nil,
+    (UIKeys.registeredFormats in ThisProject) += RegisteredFormat(SbtSerializers.playForkSupportResultFormat),
+
     sourcePositionMappers += playPositionMapper,
 
     ivyLoggingLevel := UpdateLogging.DownloadOnly,

@@ -5,6 +5,7 @@ import sbt._
 
 object Dependencies {
 
+  val sbtRcVersion = "1.0-a8e6f62a9d81d7126989f6f4b2505615aff2a8e8"
   // Some common dependencies here so they don't need to be declared over and over
   val specsVersion = "2.3.12"
   val specsBuild = Seq(
@@ -73,11 +74,19 @@ object Dependencies {
     "org.easytesting" % "fest-assert" % "1.4" % "test",
     mockitoAll % "test")
 
-  val runtime = Seq(
+  val minimumRuntime = Seq(
     "io.netty" % "netty" % "3.9.3.Final",
 
     "com.typesafe.netty" % "netty-http-pipelining" % "1.1.2",
 
+    "joda-time" % "joda-time" % "2.3",
+    "org.joda" % "joda-convert" % "1.6",
+
+    "com.typesafe.akka" %% "akka-actor" % "2.3.4") ++
+    specsBuild.map(_ % "test") ++
+    javaTestDeps
+
+  val runtime = minimumRuntime ++ Seq(
     "org.slf4j" % "slf4j-api" % "1.7.6",
     "org.slf4j" % "jul-to-slf4j" % "1.7.6",
     "org.slf4j" % "jcl-over-slf4j" % "1.7.6",
@@ -85,14 +94,10 @@ object Dependencies {
     "ch.qos.logback" % "logback-core" % "1.1.1",
     "ch.qos.logback" % "logback-classic" % "1.1.1",
 
-    "com.typesafe.akka" %% "akka-actor" % "2.3.4",
     "com.typesafe.akka" %% "akka-slf4j" % "2.3.4",
 
     "org.scala-stm" %% "scala-stm" % "0.7",
     "commons-codec" % "commons-codec" % "1.9",
-
-    "joda-time" % "joda-time" % "2.3",
-    "org.joda" % "joda-convert" % "1.6",
 
     "org.apache.commons" % "commons-lang3" % "3.1",
 
@@ -125,16 +130,27 @@ object Dependencies {
     )
   }
 
- val runSupportDependencies = Seq(
-    "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion
+  val runSupportDependencies = Seq(
+    "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion,
+    "com.typesafe.sbtrc" % "client-2-10" % sbtRcVersion
   ) ++ specsBuild.map(_ % Test)
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
+
+  val sbtClientDependencies = minimumRuntime ++ Seq(
+    typesafeConfig,
+    "com.typesafe.akka" %% "akka-testkit" % "2.3.4" % "test",
+
+    sbtPluginDep("com.typesafe.sbt" % "sbt-twirl" % "1.0.2")
+  )
+
+  val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
 
   val sbtDependencies = Seq(
     "org.scala-lang" % "scala-reflect" % BuildSettings.buildScalaVersionForSbt % "provided",
     "com.typesafe" % "config" % "1.2.1",
     "org.mozilla" % "rhino" % "1.7R4",
+    sbtBackgroundRun,
 
     ("com.google.javascript" % "closure-compiler" % "v20130603")
       .exclude("args4j", "args4j")

@@ -10,6 +10,7 @@ import com.typesafe.sbt.SbtScalariform.defaultScalariformSettings
 import scala.util.Properties.isJavaAtLeast
 import play.twirl.sbt.SbtTwirl
 import play.twirl.sbt.Import.TwirlKeys
+import com.typesafe.sbt.SbtGit._
 
 object BuildSettings {
   import Resolvers._
@@ -28,7 +29,7 @@ object BuildSettings {
   val experimental = Option(System.getProperty("experimental")).exists(_ == "true")
 
   val buildOrganization = "com.typesafe.play"
-  val buildVersion = propOr("play.version", "2.3-SNAPSHOT")
+  val buildVersion = propOr("play.version", "2.3.8")
   val buildWithDoc = boolProp("generate.doc")
   val previousVersion = "2.3.0"
   // Libraries that are not Scala libraries or are SBT libraries should not be published if the binary
@@ -52,7 +53,7 @@ object BuildSettings {
   class SharedProjectScalaVersion(val scalaVersion: String, val targetDir: String) {
     val nameSuffix:String = targetDir.replace(".","").trim()
     def toSettings(targetPrefix:String):Seq[Setting[_]] = Seq(
-      target := target.value / s"$targetPrefix-$targetDir",
+      Keys.target <<= target / s"$targetPrefix-$targetDir",
       Keys.scalaVersion := scalaVersion
     )
   }
@@ -62,25 +63,27 @@ object BuildSettings {
       new SharedProjectScalaVersion(scalaVersion,CrossVersion.binaryScalaVersion(scalaVersion))
   }
 
-  val playCommonSettings = Seq(
-    organization := buildOrganization,
-    version := buildVersion,
-    scalaVersion := buildScalaVersion,
-    homepage := Some(url("https://playframework.com")),
-    licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
-    ivyLoggingLevel := UpdateLogging.DownloadOnly,
-    javacOptions ++= makeJavacOptions("1.6"),
-    javacOptions in doc := Seq("-source", "1.6"),
-    resolvers ++= playResolvers,
-    fork in Test := true,
-    testListeners in (Test,test) := Nil,
-    javacOptions in Test := { if (isJavaAtLeast("1.8")) makeJavacOptions("1.8") else makeJavacOptions("1.6") },
-    unmanagedSourceDirectories in Test ++= { if (isJavaAtLeast("1.8")) Seq((sourceDirectory in Test).value / "java8") else Nil },
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v"),
-    testOptions in Test += Tests.Filter(!_.endsWith("Benchmark")),
-    testOptions in PerformanceTest ~= (_.filterNot(_.isInstanceOf[Tests.Filter]) :+ Tests.Filter(_.endsWith("Benchmark"))),
-    parallelExecution in PerformanceTest := false
-  )
+  val playCommonSettings =
+    versionWithGit ++ Seq(git.baseVersion := buildVersion) ++ // Comment out if you need to directly hack version
+    // Seq(version := buildVersion) ++ // useful to keep around for testing quick snapshot-based versions
+    Seq(organization := buildOrganization,
+        scalaVersion := buildScalaVersion,
+        homepage := Some(url("https://playframework.com")),
+        licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
+        scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersion),
+        ivyLoggingLevel := UpdateLogging.DownloadOnly,
+        javacOptions ++= makeJavacOptions("1.6"),
+        javacOptions in doc := Seq("-source", "1.6"),
+        resolvers ++= playResolvers,
+        fork in Test := true,
+        testListeners in (Test,test) := Nil,
+        javacOptions in Test := { if (isJavaAtLeast("1.8")) makeJavacOptions("1.8") else makeJavacOptions("1.6") },
+        unmanagedSourceDirectories in Test ++= { if (isJavaAtLeast("1.8")) Seq((sourceDirectory in Test).value / "java8") else Nil },
+        testOptions += Tests.Argument(TestFrameworks.JUnit, "-v"),
+        testOptions in Test += Tests.Filter(!_.endsWith("Benchmark")),
+        testOptions in PerformanceTest ~= (_.filterNot(_.isInstanceOf[Tests.Filter]) :+ Tests.Filter(_.endsWith("Benchmark"))),
+        parallelExecution in PerformanceTest := false
+    )
 
   def makeJavacOptions(version: String) = Seq("-source", version, "-target", version, "-encoding", "UTF-8", "-Xlint:-options")
 
@@ -225,6 +228,11 @@ object PlayBuild extends Build {
 
   lazy val RunSupportProject = runSupportProject("Run-Support", SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),publishSettings)
 
+  lazy val SbtClientProject = PlayRuntimeProject("SBT-Client", "sbt-client")
+    .settings(
+      libraryDependencies ++= sbtClientDependencies
+    ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
+
   lazy val RoutesCompilerProject = PlaySbtProject("Routes-Compiler", "routes-compiler")
     .settings(libraryDependencies ++= routersCompilerDependencies)
 
@@ -270,8 +278,7 @@ object PlayBuild extends Build {
         ProblemFilters.exclude[MissingMethodProblem]("play.core.ClosableLazy.create"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("controllers.Assets.controllers$Assets$$assetInfoFromResource")
       )
-
-    ).dependsOn(BuildLinkProject, PlayExceptionsProject, IterateesProject % "test->test;compile->compile", JsonProject)
+    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, IterateesProject % "test->test;compile->compile", JsonProject)
 
   lazy val PlayJdbcProject = PlayRuntimeProject("Play-JDBC", "play-jdbc")
     .settings(libraryDependencies ++= jdbcDeps)
@@ -365,7 +372,7 @@ object PlayBuild extends Build {
         val () = (publishLocal in FunctionalProject).value
         val () = (publishLocal in DataCommonsProject).value
       }
-    ).dependsOn(BuildLinkProject, PlayExceptionsProject, RoutesCompilerProject, SbtRunSupportProject)
+    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, RoutesCompilerProject, SbtRunSupportProject)
 
   lazy val PlayWsProject = PlayRuntimeProject("Play-WS", "play-ws")
     .settings(
@@ -464,6 +471,7 @@ object PlayBuild extends Build {
     PlayWsJavaProject,
     SbtRunSupportProject,
     RunSupportProject,
+    SbtClientProject,
     SbtPluginProject,
     PlayTestProject,
     PlayExceptionsProject,

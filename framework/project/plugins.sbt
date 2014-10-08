@@ -15,3 +15,5 @@ libraryDependencies <+= sbtVersion { sv =>
 }
 
 libraryDependencies += "org.webjars" % "webjars-locator" % "0.12"
+
+addSbtPlugin("com.typesafe.sbt" % "sbt-git" % "0.6.4")
