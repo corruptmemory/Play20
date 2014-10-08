@@ -23,7 +23,7 @@ object Dependencies {
 
   val jdbcDeps = Seq(
     "com.jolbox" % "bonecp" % "0.8.0.RELEASE",
-    h2database, 
+    h2database,
     "org.eu.acolyte" % "jdbc-driver" % "1.0.18" % "test",
     "tyrex" % "tyrex" % "1.0.1") ++ specsBuild.map(_ % "test")
 
@@ -125,16 +125,49 @@ object Dependencies {
     )
   }
 
- val runSupportDependencies = Seq(
-    "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion
+  val runSupportDependencies = Seq(
+    "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion,
+    "com.typesafe.sbtrc" % "client-2-10" % "1.0-678a1d91f2b05395b14c7f190b736db599c4353c"
   ) ++ specsBuild.map(_ % Test)
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
+
+  val sbtClientDependencies = Seq(
+    "org.scala-lang" % "scala-reflect" % BuildSettings.buildScalaVersionForSbt % "provided",
+    typesafeConfig,
+    "org.mozilla" % "rhino" % "1.7R4",
+
+    ("com.google.javascript" % "closure-compiler" % "v20130603")
+      .exclude("args4j", "args4j")
+      .exclude("com.google.protobuf", "protobuf-java")
+      .exclude("com.google.code.findbugs", "jsr305"),
+
+    guava,
+
+    "org.avaje.ebeanorm" % "avaje-ebeanorm-agent" % "3.2.2" exclude ("javax.persistence", "persistence-api"),
+
+    h2database,
+    "org.javassist" % "javassist" % "3.18.2-GA",
+
+    "net.contentobjects.jnotify" % "jnotify" % "0.94",
+
+    sbtPluginDep("com.typesafe.sbt" % "sbt-twirl" % "1.0.2"),
+
+    sbtPluginDep("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.4.0"),
+    sbtPluginDep("com.github.mpeltonen" % "sbt-idea" % "1.5.1"),
+    sbtPluginDep("com.typesafe.sbt" % "sbt-native-packager" % "0.7.4"),
+
+    sbtPluginDep("com.typesafe.sbt" % "sbt-js-engine" % "1.0.1"),
+    sbtPluginDep("com.typesafe.sbt" % "sbt-webdriver" % "1.0.0")
+  ) ++ specsSbt.map(_ % "test")
+
+  val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % "1.0-678a1d91f2b05395b14c7f190b736db599c4353c"
 
   val sbtDependencies = Seq(
     "org.scala-lang" % "scala-reflect" % BuildSettings.buildScalaVersionForSbt % "provided",
     "com.typesafe" % "config" % "1.2.1",
     "org.mozilla" % "rhino" % "1.7R4",
+    sbtBackgroundRun,
 
     ("com.google.javascript" % "closure-compiler" % "v20130603")
       .exclude("args4j", "args4j")

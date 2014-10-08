@@ -4,7 +4,6 @@
 package play
 
 import play.runsupport.PlayWatchService
-import play.sbtplugin.run._
 
 import play.api._
 import play.core._
@@ -230,6 +229,7 @@ trait PlayReloader {
         Incomplete.allExceptions(incomplete).headOption.map {
           case e: PlayException => e
           case e: xsbti.CompileFailed =>
+            print(s"HRM: ERROR!!!! --> $e")
             getProblems(incomplete)
               .find(_.severity == xsbti.Severity.Error)
               .map(CompilationException)

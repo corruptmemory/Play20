@@ -52,7 +52,7 @@ object BuildSettings {
   class SharedProjectScalaVersion(val scalaVersion: String, val targetDir: String) {
     val nameSuffix:String = targetDir.replace(".","").trim()
     def toSettings(targetPrefix:String):Seq[Setting[_]] = Seq(
-      target := target.value / s"$targetPrefix-$targetDir",
+      Keys.target <<= target / s"$targetPrefix-$targetDir",
       Keys.scalaVersion := scalaVersion
     )
   }
@@ -68,6 +68,7 @@ object BuildSettings {
     scalaVersion := buildScalaVersion,
     homepage := Some(url("https://playframework.com")),
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
+    scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersion),
     ivyLoggingLevel := UpdateLogging.DownloadOnly,
     javacOptions ++= makeJavacOptions("1.6"),
     javacOptions in doc := Seq("-source", "1.6"),
@@ -225,6 +226,11 @@ object PlayBuild extends Build {
 
   lazy val RunSupportProject = runSupportProject("Run-Support", SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),publishSettings)
 
+  lazy val SbtClientProject = PlayRuntimeProject("SBT-Client", "sbt-client")
+    .settings(
+      libraryDependencies ++= sbtClientDependencies
+    ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
+
   lazy val RoutesCompilerProject = PlaySbtProject("Routes-Compiler", "routes-compiler")
     .settings(libraryDependencies ++= routersCompilerDependencies)
 
@@ -270,8 +276,7 @@ object PlayBuild extends Build {
         ProblemFilters.exclude[MissingMethodProblem]("play.core.ClosableLazy.create"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("controllers.Assets.controllers$Assets$$assetInfoFromResource")
       )
-
-    ).dependsOn(BuildLinkProject, PlayExceptionsProject, IterateesProject % "test->test;compile->compile", JsonProject)
+    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, IterateesProject % "test->test;compile->compile", JsonProject)
 
   lazy val PlayJdbcProject = PlayRuntimeProject("Play-JDBC", "play-jdbc")
     .settings(libraryDependencies ++= jdbcDeps)
@@ -365,7 +370,7 @@ object PlayBuild extends Build {
         val () = (publishLocal in FunctionalProject).value
         val () = (publishLocal in DataCommonsProject).value
       }
-    ).dependsOn(BuildLinkProject, PlayExceptionsProject, RoutesCompilerProject, SbtRunSupportProject)
+    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, RoutesCompilerProject, SbtRunSupportProject)
 
   lazy val PlayWsProject = PlayRuntimeProject("Play-WS", "play-ws")
     .settings(
@@ -464,6 +469,7 @@ object PlayBuild extends Build {
     PlayWsJavaProject,
     SbtRunSupportProject,
     RunSupportProject,
+    SbtClientProject,
     SbtPluginProject,
     PlayTestProject,
     PlayExceptionsProject,
