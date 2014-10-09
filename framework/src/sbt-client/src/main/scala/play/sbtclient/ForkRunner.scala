@@ -576,7 +576,7 @@ class ForkRunner(config:ForkRunner.Config)(compileHandler:ForkRunner.WatchHandle
     withCompileKey(client){ compileKey =>
       println(s"withCompileKey: $compileKey")
       val loc = onCompile(client,compileKey)_
-      client.watch(TaskKey[PlayForkSupportResult](compileKey))((_,r) => loc(r))
+      client.rawWatch(TaskKey[PlayForkSupportResult](compileKey))((_,r) => loc(r.resultWithCustomThrowable[PlayForkSupportResult, CompileFailedException]))
       client.requestExecution(s"${config.project}/play-default-fork-run-support",None)
     }
   }
