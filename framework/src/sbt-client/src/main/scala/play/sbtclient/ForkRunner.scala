@@ -4,16 +4,14 @@ import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
 import java.util.jar.JarFile
 import sbt.client.{ SbtClient, SbtConnector, TaskKey }
-import sbt.protocol.{ Analysis, CompileFailedException, TaskSuccess, TaskResult, ScopedKey, TaskFailure, UnserializedValue, SerializableBuildValue, DynamicSerialization, fromXsbtiPosition, CompilationFailure }
+import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
 import scala.concurrent.ExecutionContext.Implicits.global
 import play.runsupport.protocol.PlayForkSupportResult
 import play.core.{ BuildLink, BuildDocHandler }
 import play.core.classloader.{DelegatingClassLoader, ApplicationClassLoaderProvider}
 import scala.concurrent.{Promise, Future}
 import play.runsupport.{PlayWatchService, LoggerProxy, AssetsClassLoader}
-import sbt.PathFinder
-import sbt.IO
-import sbt.{ WatchState, SourceModificationWatch }
+import sbt.{ IO, PathFinder, WatchState, SourceModificationWatch }
 import scala.annotation.tailrec
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Await
@@ -55,17 +53,14 @@ object SbtSerializers {
   implicit def tuple2Writes[A,B](implicit aWrites:Writes[A], bWrites:Writes[B]):Writes[(A,B)] =
     Writes[(A,B)] { case (s,f) => JsArray(Seq(aWrites.writes(s),bWrites.writes(f))) }
 
-  // implicit val assetsReads:Reads[(String,java.io.File)] = tuple2Reads[String,java.io.File]
-
-  // implicit val assetsWrites:Writes[(String,java.io.File)] = tuple2Writes[String,java.io.File]
-
-  val playForkSupportResultWrites:Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
-  val playForkSupportResultReads:Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
-  implicit val playForkSupportResultFormat:Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads,playForkSupportResultWrites)
+  // val playForkSupportResultWrites:Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
+  implicit val playForkSupportResultReads:Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
+  // implicit val playForkSupportResultFormat:Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads,playForkSupportResultWrites)
 }
 
 object ForkRunner {
   import scala.language.implicitConversions
+  import SbtSerializers._
 
   type URL = java.net.URL
   type Classpath = Seq[File]
@@ -76,12 +71,12 @@ object ForkRunner {
   }
 
   trait WatchHandler[T] {
-    def apply(client:SbtClient,compileKey:ScopedKey)(result:TaskResult[PlayForkSupportResult,Throwable]):WatchHandler[T]
+    def apply(client:SbtClient,compileKey:ScopedKey)(result:Try[T]):WatchHandler[T]
   }
 
   object WatchHandler {
-    def apply[T](func:(SbtClient,ScopedKey) => TaskResult[PlayForkSupportResult,Throwable] => WatchHandler[T]):WatchHandler[T] = new WatchHandler[T] {
-      def apply(client:SbtClient,compileKey:ScopedKey)(result:TaskResult[PlayForkSupportResult,Throwable]):WatchHandler[T] =
+    def apply[T](func:(SbtClient,ScopedKey) => Try[T] => WatchHandler[T]):WatchHandler[T] = new WatchHandler[T] {
+      def apply(client:SbtClient,compileKey:ScopedKey)(result:Try[T]):WatchHandler[T] =
         func(client,compileKey)(result)
     }
   }
@@ -448,14 +443,12 @@ object ForkRunner {
     }
   }
 
-  def onCompile(client:SbtClient,compileKey:ScopedKey)(result:TaskResult[PlayForkSupportResult,Throwable]):WatchHandler[PlayForkSupportResult] = {
+  def onCompile(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):WatchHandler[PlayForkSupportResult] = {
     result match {
-      case TaskSuccess(x: UnserializedValue[PlayForkSupportResult]) =>
-        println(s"UnserializedValue: $x")
-      case TaskSuccess(SerializableBuildValue(x, _, _)) =>
-        println(s"SerializableBuildValue: $x")
-      case TaskFailure(x, cause) =>
-        println(s"Failed: $x\n-- Cause: $cause")
+      case Success(x) =>
+        println(s"BuildValue: $x")
+      case Failure(x) =>
+        println(s"Failed: $x")
     }
 
     WatchHandler(onCompile _)
@@ -473,7 +466,7 @@ class WithScopedKey(client:SbtClient,keyName:String) {
 }
 
 class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Either[Throwable,PlayForkSupportResult]) => ForkRunner.PlayDevServer) {
-  import ForkRunner._
+  import ForkRunner._, SbtSerializers._
 
   @volatile private var client:SbtClient = _
   @volatile private var compileKey:ScopedKey = _
@@ -496,20 +489,17 @@ class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Eit
     }
   }
 
-  private def first(client:SbtClient,compileKey:ScopedKey)(result:TaskResult[PlayForkSupportResult,Throwable]):WatchHandler[PlayForkSupportResult] = {
+  private def first(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):WatchHandler[PlayForkSupportResult] = {
     println(s"***************** --> First time response")
 
     this.client = client
     this.compileKey = compileKey
     result match {
-      case TaskSuccess(x: UnserializedValue[PlayForkSupportResult]) =>
-        println(s"UnserializedValue: $x")
-        sys.exit(-1)
-      case TaskSuccess(SerializableBuildValue(x, _, _)) =>
-        println(s"SerializableBuildValue: $x")
+      case Success(x) =>
+        println(s"BuildValue: $x")
         server = consumer(x)(runReload _)
-      case TaskFailure(x, cause) =>
-        println(s"Failed: $x\n-- Cause: $cause")
+      case Failure(x) =>
+        println(s"Failed: $x")
         sys.exit(-1)
     }
     WatchHandler(running _)
@@ -523,14 +513,10 @@ class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Eit
     s"$prefix${in.getClass.getName}\n"+c
   }
 
-  private def running(client:SbtClient,compileKey:ScopedKey)(result:TaskResult[PlayForkSupportResult,Throwable]):WatchHandler[PlayForkSupportResult] = {
+  private def running(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):WatchHandler[PlayForkSupportResult] = {
     println(s"***************** --> Normal RUNNING handler")
     result match {
-      case TaskSuccess(x: UnserializedValue[PlayForkSupportResult]) =>
-        println(s"UnserializedValue: $x")
-        // sys.exit(-1) // ignore?
-      case TaskSuccess(SerializableBuildValue(x, _, _)) =>
-        println(s"SerializableBuildValue: $x")
+      case Success(x) =>
         resultPromise.get match {
           case null =>
             println("nobody is listening")
@@ -539,23 +525,21 @@ class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Eit
             p.trySuccess(Right(x))
             resultPromise.set(null)
         }
-      case TaskFailure(x, SerializableBuildValue(cause,_,_)) =>
-        println(s"Failed: $x\n-- Cause:\n${unwrapExceptions(cause)}")
-        cause match {
+      case Failure(x) =>
+        println(s"Failed: $x\n-- Cause:\n${unwrapExceptions(x)}")
+        x match {
           case x:CompileFailedException =>
           resultPromise.get match {
             case null =>
               println("nobody is listening")
             case p =>
               println("set value")
-              p.trySuccess(Left(cause))
+              p.trySuccess(Left(x))
               resultPromise.set(null)
           }
           case _ =>
-            println(s"[Ignoring: $cause]")
+            println(s"[Ignoring: $x]")
         }
-      case TaskFailure(x, cause) =>
-        println(s"UNSERIALIZED!! Failed: $x\n-- Cause: $cause")
     }
     WatchHandler(running _)
   }
@@ -564,7 +548,7 @@ class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Eit
 }
 
 class ForkRunner(config:ForkRunner.Config)(compileHandler:ForkRunner.WatchHandler[PlayForkSupportResult] = ForkRunner.defaultCompileHandler) {
-  import ForkRunner._
+  import ForkRunner._, SbtSerializers._
 
   private var current = compileHandler
 
@@ -573,7 +557,7 @@ class ForkRunner(config:ForkRunner.Config)(compileHandler:ForkRunner.WatchHandle
     wsk.run(body)
   }
 
-  def onCompile(client:SbtClient,compileKey:ScopedKey)(result:TaskResult[PlayForkSupportResult,Throwable]):Unit = this.synchronized {
+  def onCompile(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):Unit = this.synchronized {
     println(s"----------------------------- Thread: ${Thread.currentThread}")
     val next = current(client,compileKey)(result)
     current = next
@@ -605,7 +589,7 @@ class ForkRunner(config:ForkRunner.Config)(compileHandler:ForkRunner.WatchHandle
   def run():Unit = {
     println("Running...")
     val conn = SbtConnector("play-fork","play-fork",config.projectDir)
-    val subs = conn.openChannel(channel => onConnect(SbtClient(channel,DynamicSerialization.defaultSerializations.register(SbtSerializers.playForkSupportResultFormat))),
+    val subs = conn.openChannel(channel => onConnect(SbtClient(channel)),
                                 onError)
     println("Done")
   }

@@ -5,7 +5,7 @@ import sbt._
 
 object Dependencies {
 
-  val sbtRcVersion = "1.0-c327018be6eda3f2ac00f0777f0701fcee9cbf70"
+  val sbtRcVersion = "1.0-d16bc284e89681eb5a790f30ef12573e0487e718"
   // Some common dependencies here so they don't need to be declared over and over
   val specsVersion = "2.3.12"
   val specsBuild = Seq(
