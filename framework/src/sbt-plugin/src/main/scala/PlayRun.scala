@@ -247,7 +247,7 @@ trait PlayRun extends PlayInternalKeys {
     }
   }
 
-  val playDefaultForkRunSupportTask = playForkRunSupportTask(compile in Compile, playDependencyClasspath, playReloaderClasspath)
+  val playDefaultForkRunSupportTask = playForkRunSupportTask(playReload in Compile, playDependencyClasspath, playReloaderClasspath)
 
   def findCompilationFailure(in:Throwable):Option[xsbti.CompileFailed] = in match {
     case null => None

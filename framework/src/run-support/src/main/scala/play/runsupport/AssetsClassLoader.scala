@@ -16,13 +16,19 @@ import Path._
  */
 class AssetsClassLoader(parent: ClassLoader, assets: Seq[(String, File)]) extends ClassLoader(parent) {
   override def findResource(name: String) = {
-    assets.collectFirst {
+    println(s"LOOKING FOR: $name")
+    val r = assets.collectFirst {
       case (prefix, dir) if exists(name, prefix, dir) =>
         (dir / name.substring(prefix.length)).toURI.toURL
     }.orNull
+    println(s"FOUND[$name]: $r")
+    r
   }
 
   def exists(name: String, prefix: String, dir: File) = {
-    name.startsWith(prefix) && (dir / name.substring(prefix.length)).isFile
+    println(s"CHECKING FOR: $name, $prefix, $dir")
+    val r = name.startsWith(prefix) && (dir / name.substring(prefix.length)).isFile
+    println(s"IS FILE[$name, $prefix, $dir]: $r")
+    r
   }
 }

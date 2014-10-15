@@ -83,22 +83,6 @@ object ForkRunner {
 
   import PlayExceptions._
 
-// startDevMode(state: State,
-//              runHooks: Seq[play.PlayRunHook],
-//              javaOptions: Seq[String],
-//              dependencyClasspath: Classpath,
-//              dependencyClassLoader: ClassLoaderCreator, // uRLClassLoaderCreator
-//              reloaderClasspathTask: TaskKey[Classpath],
-//              reloaderClassLoader: ClassLoaderCreator, // delegatedResourcesClassLoaderCreator
-//              assetsClassLoader: ClassLoader => ClassLoader,
-//              commonClassLoader: ClassLoader, // commonClassLoader, playCommonClassloaderTask
-//              monitoredFiles: Seq[String],
-//              playWatchService: PlayWatchService,
-//              docsClasspath: Classpath,
-//              interaction: PlayInteractionMode,
-//              defaultHttpPort: Int,
-//              args: Seq[String])
-
   def urls(cp: Classpath): Array[URL] = cp.map(_.toURI.toURL).toArray
 
   // dependencyClassLoader: ClassLoaderCreator,
@@ -109,10 +93,14 @@ object ForkRunner {
   def assetsClassLoader(parent:ClassLoader, allAssets: Seq[(String, File)]):ClassLoader = new AssetsClassLoader(parent, allAssets)
 
   // reloaderClassLoader: ClassLoaderCreator
-  def delegatedResourcesClassLoaderCreator(name:String, urls:Array[URL], parent:ClassLoader):ClassLoader = new java.net.URLClassLoader(urls, parent) {
-    require(parent ne null)
-    override def getResources(name: String): java.util.Enumeration[java.net.URL] = getParent.getResources(name)
-    override def toString = name + "{" + getURLs.map(_.toString).mkString(", ") + "}"
+  def delegatedResourcesClassLoaderCreator(name:String, urls:Array[URL], parent:ClassLoader):ClassLoader = {
+    println(s"^^^^^^^^^^^^^^^^^ New classloader: $name")
+
+    new java.net.URLClassLoader(urls, parent) {
+      require(parent ne null)
+      override def getResources(name: String): java.util.Enumeration[java.net.URL] = getParent.getResources(name)
+      override def toString = name + "{" + getURLs.map(_.toString).mkString(", ") + "}"
+    }
   }
 
   private implicit def convertToOption[T](o: xsbti.Maybe[T]): Option[T] =
@@ -188,6 +176,7 @@ object ForkRunner {
 
       // Create the watcher, updates the changed boolean when a file has changed.
       private val watcher = playWatchService.watch(monitoredFiles.map(new File(_)), () => {
+        println(s">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> File changed!!!!")
         changed = true
       })
       private val classLoaderVersion = new java.util.concurrent.atomic.AtomicInteger(0)
@@ -297,7 +286,7 @@ object ForkRunner {
         in match {
           case e: play.api.PlayException => e
           case e: CompileFailedException =>
-          print(s"OH YEAH: ERROR!!!! --> $e")
+          println(s"OH YEAH: ERROR!!!! --> $e")
             getProblems(e)
               .find(_.severity == xsbti.Severity.Error)
               .map(CompilationException)
@@ -558,7 +547,6 @@ class ForkRunner(config:ForkRunner.Config)(compileHandler:ForkRunner.WatchHandle
   }
 
   def onCompile(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):Unit = this.synchronized {
-    println(s"----------------------------- Thread: ${Thread.currentThread}")
     val next = current(client,compileKey)(result)
     current = next
   }
