@@ -143,6 +143,8 @@ object Dependencies {
       .exclude("com.google.protobuf", "protobuf-java")
       .exclude("com.google.code.findbugs", "jsr305"),
 
+    "com.typesafe.akka" %% "akka-testkit" % "2.3.4" % "test",
+
     guava,
 
     "org.avaje.ebeanorm" % "avaje-ebeanorm-agent" % "3.2.2" exclude ("javax.persistence", "persistence-api"),
