@@ -71,7 +71,7 @@ abstract class AkkaTestKitHelper(_system: ActorSystem) extends TestKit(_system) 
 
   def withSbtClientProxy[T](client:SbtClient)(body:ActorRef => T)(implicit ex:ExecutionContext):T = {
     import SbtClientProxy._
-    val cp = system.actorOf(Props(new SbtClientProxy(client,ex)))
+    val cp = system.actorOf(Props(new SbtClientProxy(client, ex, x => testActor ! x)))
     try {
       body(cp)
     } finally {

@@ -45,7 +45,7 @@ class SbtClientProxySpec extends Specification with NoTimeConversions {
   "A SbtClientProxy" should {
     "close down gracefully" in new AkkaTestKitHelper() {
       withFakeSbtClient() { client =>
-        val cp = system.actorOf(Props(new SbtClientProxy(client,global)))
+        val cp = system.actorOf(Props(new SbtClientProxy(client,global,x => testActor ! x)))
         cp ! Close(testActor)
         expectMsgType[Closed.type] must be equalTo Closed
       }

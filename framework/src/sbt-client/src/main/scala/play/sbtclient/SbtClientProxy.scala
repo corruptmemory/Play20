@@ -13,6 +13,11 @@ import sbt.protocol
 import scala.language.existentials, scala.language.higherKinds
 
 object SbtClientProxy {
+  sealed trait Notification
+  object Notifications {
+    case object Reconnected extends Notification
+  }
+
   case class UpdateClient(client:SbtClient)
   case class WatchEvent(key:protocol.ScopedKey, result:protocol.TaskResult)
 
@@ -32,12 +37,12 @@ object SbtClientProxy {
 
   sealed trait LocalRequest[Resp] extends Request[Resp]
   case class LookupScopedKey(name: String, sendTo:ActorRef) extends LocalRequest[LookupScopedKeyResponse] {
-    def responseWithResult(result: Try[Seq[ScopedKey]])(implicit sender: ActorRef = Actor.noSender):Unit = response(LookupScopedKeyResponse(name,result))
+    def responseWithResult(result: Try[Seq[ScopedKey]])(implicit sender: ActorRef):Unit = response(LookupScopedKeyResponse(name,result))
   }
 
   sealed trait RequestExecution extends LocalRequest[ExecutionId] {
     def interaction: Option[(Interaction, ExecutionContext)]
-    final def responseWithExecutionId(id:Try[Long])(implicit sender: ActorRef = Actor.noSender):Unit = response(ExecutionId(id,this))
+    final def responseWithExecutionId(id:Try[Long])(implicit sender: ActorRef):Unit = response(ExecutionId(id,this))
   }
   object RequestExecution {
     case class ByCommandOrTask(commandOrTask: String, interaction: Option[(Interaction, ExecutionContext)], sendTo:ActorRef) extends RequestExecution
@@ -45,35 +50,35 @@ object SbtClientProxy {
   }
 
   case class CancelExecution(id:Long, sendTo:ActorRef) extends LocalRequest[CancelExecutionResponse] {
-    final def responseWithResult(r:Try[Boolean])(implicit sender: ActorRef = Actor.noSender):Unit = response(CancelExecutionResponse(id,r))
+    final def responseWithResult(r:Try[Boolean])(implicit sender: ActorRef):Unit = response(CancelExecutionResponse(id,r))
   }
 
   case class SubscribeToEvents(sendTo:ActorRef) extends LocalRequest[EventsSubscribed.type] {
-    def subscribed()(implicit sender: ActorRef = Actor.noSender):Unit = response(EventsSubscribed)
+    def subscribed()(implicit sender: ActorRef):Unit = response(EventsSubscribed)
   }
   case class UnsubscribeFromEvents(sendTo:ActorRef) extends LocalRequest[EventsUnsubscribed.type] {
-    def unsubscribed()(implicit sender: ActorRef = Actor.noSender):Unit = response(EventsUnsubscribed)
+    def unsubscribed()(implicit sender: ActorRef):Unit = response(EventsUnsubscribed)
   }
   case class SubscribeToBuild(sendTo:ActorRef) extends LocalRequest[BuildSubscribed.type] {
-    def subscribed()(implicit sender: ActorRef = Actor.noSender):Unit = response(BuildSubscribed)
+    def subscribed()(implicit sender: ActorRef):Unit = response(BuildSubscribed)
   }
   case class UnsubscribeFromBuild(sendTo:ActorRef) extends LocalRequest[BuildUnsubscribed.type] {
-    def unsubscribed()(implicit sender: ActorRef = Actor.noSender):Unit = response(BuildUnsubscribed)
+    def unsubscribed()(implicit sender: ActorRef):Unit = response(BuildUnsubscribed)
   }
   case class WatchTask(key:TaskKey[_],sendTo:ActorRef) extends LocalRequest[WatchingTask] {
-    def watching(key:TaskKey[_])(implicit sender: ActorRef = Actor.noSender):Unit = response(WatchingTask(key))
+    def watching(key:TaskKey[_])(implicit sender: ActorRef):Unit = response(WatchingTask(key))
   }
   case class RemoveTaskWatch(key:TaskKey[_],sendTo:ActorRef) extends LocalRequest[TaskWatchRemoved] {
-    def removed(key:TaskKey[_])(implicit sender: ActorRef = Actor.noSender):Unit = response(TaskWatchRemoved(key))
+    def removed(key:TaskKey[_])(implicit sender: ActorRef):Unit = response(TaskWatchRemoved(key))
   }
   case class WatchSetting(key:SettingKey[_],sendTo:ActorRef) extends LocalRequest[WatchingSetting] {
-    def watching(key:SettingKey[_])(implicit sender: ActorRef = Actor.noSender):Unit = response(WatchingSetting(key))
+    def watching(key:SettingKey[_])(implicit sender: ActorRef):Unit = response(WatchingSetting(key))
   }
   case class RemoveSettingWatch(key:SettingKey[_],sendTo:ActorRef) extends LocalRequest[SettingWatchRemoved] {
-    def removed(key:SettingKey[_])(implicit sender: ActorRef = Actor.noSender):Unit = response(SettingWatchRemoved(key))
+    def removed(key:SettingKey[_])(implicit sender: ActorRef):Unit = response(SettingWatchRemoved(key))
   }
   case class Close(sendTo:ActorRef) extends LocalRequest[Closed.type] {
-    def closed()(implicit sender: ActorRef = Actor.noSender):Unit = response(Closed)
+    def closed()(implicit sender: ActorRef):Unit = response(Closed)
   }
 
   sealed trait GenericKey[T] {
@@ -109,7 +114,9 @@ object SbtClientProxy {
   }
 }
 
-final class SbtClientProxy(initialClient:SbtClient, ec: ExecutionContext) extends Actor with ActorLogging {
+final class SbtClientProxy(initialClient:SbtClient,
+                           ec: ExecutionContext,
+                           notificationSink:SbtClientProxy.Notification => Unit  = _ => ()) extends Actor with ActorLogging {
   import SbtClientProxy._
   implicit val ec1 = ec
 
@@ -127,130 +134,134 @@ final class SbtClientProxy(initialClient:SbtClient, ec: ExecutionContext) extend
 
   private def canUnwatch(state:State, target:ActorRef):Boolean = state.allSubscribers()(target)
 
-  private def onRequest(req:LocalRequest[_], state:State, self:ActorRef):Unit = req match {
-    case r:Close =>
-      state.eventSubscriptions foreach { es =>
-        es.subscription.cancel() // Can this throw an exeption?
-      }
-      state.buildSubscriptions foreach { bs =>
-        bs.subscription.cancel() // Can this throw an exeption?
-      }
-      state.watchSubscriptions foreach { case (_,ws) =>
-        ws.subscription.cancel() // Can this throw an exeption?
-      }
-      state.client.close()
-      r.closed()
-      context stop self
-    case r:LookupScopedKey =>
-      state.client.lookupScopedKey(r.name).onComplete(r.responseWithResult)
-    case r:RequestExecution.ByCommandOrTask =>
-      state.client.requestExecution(r.commandOrTask,r.interaction).onComplete(id => r.responseWithExecutionId(id))
-    case r:RequestExecution.ByScopedKey =>
-      state.client.requestExecution(r.key,r.interaction).onComplete(id => r.responseWithExecutionId(id))
-    case r:CancelExecution =>
-      state.client.cancelExecution(r.id).onComplete(x => r.responseWithResult(x))
-    case r:SubscribeToEvents =>
-      state.eventSubscriptions match {
-        case Some(es) =>
-          context.become(running(state.copy(eventSubscriptions = Some(es.copy(subscribers = es.subscribers + r.sendTo)))))
-        case None =>
-          val s = state.client.handleEvents(eventListener(self))
-          context.become(running(state.copy(eventSubscriptions = Some(EventSubscribers(s,Set(r.sendTo))))))
-      }
-      context.watch(r.sendTo)
-      r.subscribed()
-    case r:UnsubscribeFromEvents =>
-      val newState = state.eventSubscriptions match {
-        case Some(es) =>
-          val newSubs = es.subscribers - r.sendTo
-          if (newSubs.isEmpty) {
-            es.subscription.cancel()
-            state.copy(eventSubscriptions = None)
-          } else state.copy(eventSubscriptions = Some(es.copy(subscribers = newSubs)))
-        case None => state
-      }
-      context.become(running(newState))
-      if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
-      r.unsubscribed()
-    case r:SubscribeToBuild =>
-      state.buildSubscriptions match {
-        case Some(bs) =>
-          context.become(running(state.copy(buildSubscriptions = Some(bs.copy(subscribers = bs.subscribers + r.sendTo)))))
-        case None =>
-          val s = state.client.watchBuild(buildListener(self))
-          context.become(running(state.copy(buildSubscriptions = Some(BuildSubscribers(s,Set(r.sendTo))))))
-      }
-      context.watch(r.sendTo)
-      r.subscribed()
-    case r:UnsubscribeFromBuild =>
-      val newState = state.buildSubscriptions match {
-        case Some(bs) =>
-          val newSubs = bs.subscribers - r.sendTo
-          if (newSubs.isEmpty) {
-            bs.subscription.cancel()
-            state.copy(buildSubscriptions = None)
-          } else state.copy(buildSubscriptions = Some(bs.copy(subscribers = newSubs)))
-        case None => state
-      }
-      context.become(running(newState))
-      if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
-      r.unsubscribed()
-    case r:WatchTask =>
-      state.watchSubscriptions.get(r.key.key) match {
-        case Some(ws) =>
-          val newWatcher = ws.copy(subscribers = ws.subscribers + r.sendTo)
-          context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
-        case None =>
-          val s = state.client.rawLazyWatch(r.key)(watchListener(self))
-          val newWatcher = WatchSubscribers(GenericKey.fromTaskKey(r.key),s,Set(r.sendTo))
-          context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
-      }
-      context.watch(r.sendTo)
-      r.watching(r.key)
-    case r:RemoveTaskWatch =>
-      val newState = state.watchSubscriptions.get(r.key.key) match {
-        case Some(ws) =>
-          val newSubs = ws.subscribers - r.sendTo
-          if (newSubs.isEmpty) {
-            ws.subscription.cancel()
-            state.copy(watchSubscriptions = state.watchSubscriptions - r.key.key)
-          } else {
-            val newWatcher = ws.copy(subscribers = newSubs)
-            state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))
-          }
-        case None => state
-      }
-      context.become(running(newState))
-      if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
-      r.removed(r.key)
-    case r:WatchSetting =>
-      state.watchSubscriptions.get(r.key.key) match {
-        case Some(ws) =>
-          val newWatcher = ws.copy(subscribers = ws.subscribers + r.sendTo)
-          context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
-        case None =>
-          val s = state.client.rawLazyWatch(r.key)(watchListener(self))
-          val newWatcher = WatchSubscribers(GenericKey.fromSettingKey(r.key),s,Set(r.sendTo))
-          context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
-      }
-      context.watch(r.sendTo)
-      r.watching(r.key)
-    case r:RemoveSettingWatch =>
-      val newState = state.watchSubscriptions.get(r.key.key) match {
-        case Some(ws) =>
-          val newSubs = ws.subscribers - r.sendTo
-          if (newSubs.isEmpty) {
-            ws.subscription.cancel()
-            state.copy(watchSubscriptions = state.watchSubscriptions - r.key.key)
-          } else {
-            val newWatcher = ws.copy(subscribers = newSubs)
-            state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))
-          }
-        case None => state
-      }
-      context.become(running(newState))
-      if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
-      r.removed(r.key)
+  private def onRequest(req:LocalRequest[_], state:State, self:ActorRef):Unit = {
+    implicit val localSelf = self
+
+    req match {
+      case r:Close =>
+        state.eventSubscriptions foreach { es =>
+          es.subscription.cancel() // Can this throw an exeption?
+        }
+        state.buildSubscriptions foreach { bs =>
+          bs.subscription.cancel() // Can this throw an exeption?
+        }
+        state.watchSubscriptions foreach { case (_,ws) =>
+          ws.subscription.cancel() // Can this throw an exeption?
+        }
+        state.client.close()
+        r.closed()
+        context stop self
+      case r:LookupScopedKey =>
+        state.client.lookupScopedKey(r.name).onComplete(r.responseWithResult)
+      case r:RequestExecution.ByCommandOrTask =>
+        state.client.requestExecution(r.commandOrTask,r.interaction).onComplete(id => r.responseWithExecutionId(id))
+      case r:RequestExecution.ByScopedKey =>
+        state.client.requestExecution(r.key,r.interaction).onComplete(id => r.responseWithExecutionId(id))
+      case r:CancelExecution =>
+        state.client.cancelExecution(r.id).onComplete(x => r.responseWithResult(x))
+      case r:SubscribeToEvents =>
+        state.eventSubscriptions match {
+          case Some(es) =>
+            context.become(running(state.copy(eventSubscriptions = Some(es.copy(subscribers = es.subscribers + r.sendTo)))))
+          case None =>
+            val s = state.client.handleEvents(eventListener(self))
+            context.become(running(state.copy(eventSubscriptions = Some(EventSubscribers(s,Set(r.sendTo))))))
+        }
+        context.watch(r.sendTo)
+        r.subscribed()
+      case r:UnsubscribeFromEvents =>
+        val newState = state.eventSubscriptions match {
+          case Some(es) =>
+            val newSubs = es.subscribers - r.sendTo
+            if (newSubs.isEmpty) {
+              es.subscription.cancel()
+              state.copy(eventSubscriptions = None)
+            } else state.copy(eventSubscriptions = Some(es.copy(subscribers = newSubs)))
+          case None => state
+        }
+        context.become(running(newState))
+        if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
+        r.unsubscribed()
+      case r:SubscribeToBuild =>
+        state.buildSubscriptions match {
+          case Some(bs) =>
+            context.become(running(state.copy(buildSubscriptions = Some(bs.copy(subscribers = bs.subscribers + r.sendTo)))))
+          case None =>
+            val s = state.client.watchBuild(buildListener(self))
+            context.become(running(state.copy(buildSubscriptions = Some(BuildSubscribers(s,Set(r.sendTo))))))
+        }
+        context.watch(r.sendTo)
+        r.subscribed()
+      case r:UnsubscribeFromBuild =>
+        val newState = state.buildSubscriptions match {
+          case Some(bs) =>
+            val newSubs = bs.subscribers - r.sendTo
+            if (newSubs.isEmpty) {
+              bs.subscription.cancel()
+              state.copy(buildSubscriptions = None)
+            } else state.copy(buildSubscriptions = Some(bs.copy(subscribers = newSubs)))
+          case None => state
+        }
+        context.become(running(newState))
+        if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
+        r.unsubscribed()
+      case r:WatchTask =>
+        state.watchSubscriptions.get(r.key.key) match {
+          case Some(ws) =>
+            val newWatcher = ws.copy(subscribers = ws.subscribers + r.sendTo)
+            context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
+          case None =>
+            val s = state.client.rawLazyWatch(r.key)(watchListener(self))
+            val newWatcher = WatchSubscribers(GenericKey.fromTaskKey(r.key),s,Set(r.sendTo))
+            context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
+        }
+        context.watch(r.sendTo)
+        r.watching(r.key)
+      case r:RemoveTaskWatch =>
+        val newState = state.watchSubscriptions.get(r.key.key) match {
+          case Some(ws) =>
+            val newSubs = ws.subscribers - r.sendTo
+            if (newSubs.isEmpty) {
+              ws.subscription.cancel()
+              state.copy(watchSubscriptions = state.watchSubscriptions - r.key.key)
+            } else {
+              val newWatcher = ws.copy(subscribers = newSubs)
+              state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))
+            }
+          case None => state
+        }
+        context.become(running(newState))
+        if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
+        r.removed(r.key)
+      case r:WatchSetting =>
+        state.watchSubscriptions.get(r.key.key) match {
+          case Some(ws) =>
+            val newWatcher = ws.copy(subscribers = ws.subscribers + r.sendTo)
+            context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
+          case None =>
+            val s = state.client.rawLazyWatch(r.key)(watchListener(self))
+            val newWatcher = WatchSubscribers(GenericKey.fromSettingKey(r.key),s,Set(r.sendTo))
+            context.become(running(state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))))
+        }
+        context.watch(r.sendTo)
+        r.watching(r.key)
+      case r:RemoveSettingWatch =>
+        val newState = state.watchSubscriptions.get(r.key.key) match {
+          case Some(ws) =>
+            val newSubs = ws.subscribers - r.sendTo
+            if (newSubs.isEmpty) {
+              ws.subscription.cancel()
+              state.copy(watchSubscriptions = state.watchSubscriptions - r.key.key)
+            } else {
+              val newWatcher = ws.copy(subscribers = newSubs)
+              state.copy(watchSubscriptions = state.watchSubscriptions + (r.key.key -> newWatcher))
+            }
+          case None => state
+        }
+        context.become(running(newState))
+        if (canUnwatch(newState,r.sendTo)) context.unwatch(r.sendTo)
+        r.removed(r.key)
+    }
   }
 
 
@@ -273,6 +284,7 @@ final class SbtClientProxy(initialClient:SbtClient, ec: ExecutionContext) extend
             ws.copy(subscription = c.rawLazyWatch(k)(watchListener(self)))
         }
       }
+      notificationSink(Notifications.Reconnected)
       context.become(running(state.copy(client = c, eventSubscriptions = newEventSubscriptions, buildSubscriptions = newBuildSubscriptions, watchSubscriptions = newWatchSubscriptions)))
     case Terminated(t) =>
       context.unwatch(t)

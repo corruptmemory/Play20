@@ -10,78 +10,104 @@ import akka.actor._
 import akka.testkit._
 import concurrent.ExecutionContext.Implicits.global
 import sbt.client.{Subscription,SbtConnector,SbtClient,Interaction, SettingKey, TaskKey}
-
-case class FromBuilder(message:Any)
-case class FromClient(message:Any)
-case object Created
-case object ReceivedSubscription
-
-object ProbeProxy {
-  def defaultSink[T](probe:ActorRef,msg:Any,wrapper:Any => T,sender:ActorRef):Unit = {
-    probe.tell(wrapper(msg),sender)
-  }
-
-  def builderSink[T](probe:ActorRef,msg:Any,wrapper:Any => T,sender:ActorRef):Unit = {
-    println(wrapper(msg))
-    msg match {
-      case SbtClientBuilder.Subscription(_) =>
-        probe.tell(wrapper(ReceivedSubscription),sender)
-      case _ =>
-    }
-
-  }
-
-
-  def emptySink[T](probe:ActorRef,msg:Any,wrapper:Any => T,sender:ActorRef):Unit = {}
-
-  def printingSink[T](probe:ActorRef,msg:Any,wrapper:Any => T,sender:ActorRef):Unit = {
-    println(wrapper(msg))
-  }
-}
-
-class ProbeProxy[T](underlyingProps:Props, probe:ActorRef, wrapper:Any => T, sink:(ActorRef,Any,Any => T,ActorRef) => Unit = ProbeProxy.defaultSink _) extends Actor with ActorLogging {
-  val underlying = context.actorOf(underlyingProps)
-
-  def receive:Receive = {
-    probe ! wrapper(Created)
-
-    {
-      case Terminated(_) =>
-        context stop self
-      case msg =>
-        sink(probe,msg,wrapper,sender)
-        underlying.tell(msg,sender)
-    }
-  }
-}
+import com.typesafe.config.{ ConfigFactory, Config }
 
 object SbtConnectionProxySpec {
-  def builderProps(newClient:SbtConnectionProxy.NewClient, notificationSink:ActorRef, probe:ActorRef,sink:(ActorRef,Any,Any => FromBuilder,ActorRef) => Unit = ProbeProxy.defaultSink _) = Props(new ProbeProxy(Props(new SbtClientBuilder(newClient,notificationSink)),probe, FromBuilder.apply, sink))
-  def clientProps(client:SbtClient, probe:ActorRef,sink:(ActorRef,Any,Any => FromClient,ActorRef) => Unit = ProbeProxy.defaultSink _) = Props(new ProbeProxy(Props(new SbtClientProxy(client,global)),probe, FromClient.apply, sink))
+  def builderProps(newClient:SbtConnectionProxy.NewClient, notificationSink:ActorRef) = Props(new SbtClientBuilder(newClient,notificationSink))
+  def clientProps(client:SbtClient,notificationSink:SbtClientProxy.Notification => Unit  = _ => ()) = Props(new SbtClientProxy(client,global,notificationSink))
+
+  abstract class SbtConnectionProxySpecHelper(_system: ActorSystem) extends AkkaTestKitHelper(_system) {
+    import SbtConnectionProxy._
+    import concurrent.ExecutionContext
+
+    def this(config: Config) = this(ActorSystem(AkkaTestKitHelper.randomActorSystemName, config))
+    def this() = this(AkkaTestKitHelper.config)
+
+    def withSbtConnectionProxy[T](conn:SbtConnector,
+                                  client:SbtClient,
+                                  notificationSink:SbtConnectionProxy.Notification => Unit  = _ => (),
+                                  testClosed:Boolean = true,
+                                  builderProps:(SbtConnectionProxy.NewClient, ActorRef) => Props = SbtConnectionProxySpec.builderProps _,
+                                  clientProps:SbtClient => Props = SbtConnectionProxySpec.clientProps(_))(body:ActorRef => T)(implicit ex:ExecutionContext):T = {
+      import SbtConnectionProxy._
+      val cp = system.actorOf(Props(new SbtConnectionProxy(conn, (_ => client),builderProps,clientProps, ex, notificationSink)))
+      try {
+        body(cp)
+      } finally {
+        cp ! Close(testActor)
+        expectMsgType[Closed.type] must be equalTo Closed
+        if (testClosed) client.isClosed must be equalTo true
+      }
+    }
+  }
 }
 
 class SbtConnectionProxySpec extends Specification with NoTimeConversions {
-   sequential
+   // sequential
    import SbtConnectionProxySpec._, SbtConnectionProxy._
 
   "A SbtConnectionProxy" should {
-    "shutdown gracefully" in new AkkaTestKitHelper() {
+    "shutdown gracefully" in new SbtConnectionProxySpecHelper() {
       withFakeEverything() { (conn,client) =>
-        val cp = system.actorOf(Props(new SbtConnectionProxy(conn, (_ => client),(nc,ns) => builderProps(nc,ns,testActor), c => clientProps(c,testActor), global)))
-        cp ! Close(testActor)
-        expectMsgType[Closed.type] must be equalTo Closed
+        withSbtConnectionProxy(conn,client, testClosed = false) { cp => }
       }
     }
-    "create a builder and client" in new AkkaTestKitHelper() {
+    "create a new client" in new SbtConnectionProxySpecHelper() {
       withFakeEverything() { (conn,client) =>
-        val cp = system.actorOf(Props(new SbtConnectionProxy(conn, (_ => client),(nc,ns) => builderProps(nc,ns,testActor, ProbeProxy.builderSink _), c => clientProps(c,testActor, ProbeProxy.printingSink _), global)))
-        cp ! NewClient(testActor)
-        expectMsgType[FromBuilder] must be equalTo FromBuilder(Created)
-        expectMsgType[FromBuilder] must be equalTo FromBuilder(ReceivedSubscription)
-        conn.sendValue(FakeSbtConnector.Channel)
-        expectMsgAllClassOf(classOf[NewClientResponse.Connected],classOf[FromClient]) must contain (FromClient(Created))
-        cp ! Close(testActor)
-        expectMsgType[Closed.type] must be equalTo Closed
+        withSbtConnectionProxy(conn,client,x => testActor ! x) { cp =>
+          cp ! NewClient(testActor)
+          expectMsg(Notifications.BuilderAwaitingChannel)
+          conn.sendValue(FakeSbtConnector.Channel)
+          val NewClientResponse.Connected(proxy) = expectMsgType[NewClientResponse.Connected]
+        }
+      }
+    }
+    "propogate reconnect" in new SbtConnectionProxySpecHelper() {
+      withFakeEverything() { (conn,client) =>
+        withSbtConnectionProxy(conn,client,x => testActor ! x, clientProps = clientProps(_,x => testActor ! x)) { cp =>
+          cp ! NewClient(testActor)
+          expectMsg(Notifications.BuilderAwaitingChannel)
+          conn.sendValue(FakeSbtConnector.Channel)
+          val NewClientResponse.Connected(proxy) = expectMsgType[NewClientResponse.Connected]
+          conn.sendValue(FakeSbtConnector.Channel)
+          expectMsg(SbtClientProxy.Notifications.Reconnected)
+        }
+      }
+    }
+    "absorb recoverable errors" in new SbtConnectionProxySpecHelper() {
+      withFakeEverything() { (conn,client) =>
+        withSbtConnectionProxy(conn,client,x => testActor ! x) { cp =>
+          cp ! NewClient(testActor)
+          expectMsg(Notifications.BuilderAwaitingChannel)
+          conn.sendValue(FakeSbtConnector.Channel)
+          val NewClientResponse.Connected(proxy) = expectMsgType[NewClientResponse.Connected]
+          conn.sendValue(FakeSbtConnector.Error(true,"recoverable"))
+          expectNoMsg()
+        }
+      }
+    }
+    "clean up after client closure" in new SbtConnectionProxySpecHelper() {
+      withFakeEverything() { (conn,client) =>
+        withSbtConnectionProxy(conn,client,x => testActor ! x) { cp =>
+          cp ! NewClient(testActor)
+          expectMsg(Notifications.BuilderAwaitingChannel)
+          conn.sendValue(FakeSbtConnector.Channel)
+          val NewClientResponse.Connected(proxy) = expectMsgType[NewClientResponse.Connected]
+          proxy ! SbtClientProxy.Close(testActor)
+          expectMsgAllClassOf(SbtClientProxy.Closed.getClass(),Notifications.CleanedUpAfterClientClosure.getClass())
+        }
+      }
+    }
+    "clean up after unrecoverable error" in new SbtConnectionProxySpecHelper() {
+      withFakeEverything() { (conn,client) =>
+        withSbtConnectionProxy(conn,client,x => testActor ! x) { cp =>
+          cp ! NewClient(testActor)
+          expectMsg(Notifications.BuilderAwaitingChannel)
+          conn.sendValue(FakeSbtConnector.Channel)
+          val NewClientResponse.Connected(proxy) = expectMsgType[NewClientResponse.Connected]
+          conn.sendValue(FakeSbtConnector.Error(false,"unrecoverable"))
+          expectMsg(Notifications.ClientClosedDueToDisconnect)
+        }
       }
     }
   }
