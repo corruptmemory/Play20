@@ -112,6 +112,12 @@ object SbtClientProxy {
       (watchSubscriptions.values.map(_.subscribers).flatten.toSet)
     }
   }
+
+  def props(initialClient:SbtClient,
+            notificationSink:SbtClientProxy.Notification => Unit  = _ => ())(implicit ex: ExecutionContext):Props =
+    Props(new SbtClientProxy(initialClient = initialClient,
+                             ec = ex,
+                             notificationSink = notificationSink))
 }
 
 final class SbtClientProxy(initialClient:SbtClient,

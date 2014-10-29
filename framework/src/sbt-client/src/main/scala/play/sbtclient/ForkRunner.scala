@@ -7,7 +7,7 @@ import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
 import java.util.jar.JarFile
 import sbt.client.{ SbtClient, SbtConnector, TaskKey }
-import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
+import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
 import scala.concurrent.ExecutionContext.Implicits.global
 import play.runsupport.protocol.PlayForkSupportResult
 import play.core.{ BuildLink, BuildDocHandler }
@@ -17,9 +17,12 @@ import play.runsupport.{PlayWatchService, LoggerProxy, AssetsClassLoader}
 import sbt.{ IO, PathFinder, WatchState, SourceModificationWatch }
 import scala.annotation.tailrec
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CountDownLatch
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{ Try, Success, Failure }
+import akka.actor._
+import com.typesafe.config.{ ConfigFactory, Config }
 
 object SbtSerializers {
   import play.api.libs.json._
@@ -73,16 +76,7 @@ object ForkRunner {
     def getClassLoader: Option[ClassLoader]
   }
 
-  trait WatchHandler[T] {
-    def apply(client:SbtClient,compileKey:ScopedKey)(result:Try[T]):WatchHandler[T]
-  }
-
-  object WatchHandler {
-    def apply[T](func:(SbtClient,ScopedKey) => Try[T] => WatchHandler[T]):WatchHandler[T] = new WatchHandler[T] {
-      def apply(client:SbtClient,compileKey:ScopedKey)(result:Try[T]):WatchHandler[T] =
-        func(client,compileKey)(result)
-    }
-  }
+  case class Reload(expected:Promise[Either[Throwable,PlayForkSupportResult]])
 
   import PlayExceptions._
 
@@ -134,7 +128,6 @@ object ForkRunner {
     }
   }
 
-
   // commonClassLoader: ClassLoader
   private[this] var commonClassLoader: ClassLoader = _
 
@@ -152,7 +145,6 @@ object ForkRunner {
 
     commonClassLoader
   }
-
 
   def newReloader(runReload:() => Either[Throwable,PlayForkSupportResult],
     createClassLoader: ClassLoaderCreator,
@@ -318,9 +310,13 @@ object ForkRunner {
 
   }
 
-  case class Config(projectDir:File,
+  case class Config(connector:SbtConnector,
+                    latch:CountDownLatch,
+                    command:String,
+                    projectDir:File,
                     buildUri:URI,
-                    project: String)
+                    project: String,
+                    serverBuilder:PlayForkSupportResult => (() => Either[Throwable,PlayForkSupportResult]) => PlayDevServer)
 
   object Int {
     def unapply(s : String) : Option[Int] = try {
@@ -338,6 +334,18 @@ object ForkRunner {
     def error(message: => String): Unit = System.err.println(s"[error]: $message")
     def trace(t: => Throwable): Unit = System.err.println(s"[trace]: $t")
     def success(message: => String): Unit = System.err.println(s"[success]: $message")
+  }
+
+  object AkkaConfig {
+    val configString =
+      """
+        |akka {
+        |  loglevel = "DEBUG"
+        |  stdout-loglevel = "DEBUG"
+        |}
+      """.stripMargin
+
+    val config = ConfigFactory.parseString(configString)
   }
 
   def main(args:Array[String]):Unit = {
@@ -358,11 +366,15 @@ object ForkRunner {
     println(s"httpsPort: $httpsPort")
     println(s"pollDelayMillis: $pollDelayMillis")
 
-    val config = Config(new File(baseDirectoryString), new URI(buildUriString), project)
+    val latch = new CountDownLatch(1)
+    val system = ActorSystem("play-dev-mode-runner",AkkaConfig.config)
+    val projectDir = new File(baseDirectoryString)
+    val conn = SbtConnector("play-fork","play-fork",projectDir)
     val serverBuilder = runServer(httpPort,httpsPort,new File(buildUriString), new File(targetDirectory), pollDelayMillis, SillyLogger)_
-    val compileRunner = new CompileRunner(s"$project/play-default-fork-run-support",serverBuilder)
-    val runner = new ForkRunner(config)(compileRunner.initialBehavior)
-    runner.run()
+    val config = Config(conn,latch,s"$project/play-default-fork-run-support", projectDir, new URI(buildUriString), project, serverBuilder)
+    val runner = system.actorOf(Props(new ForkRunner(config)))
+    latch.await()
+    system.shutdown()
   }
 
   private[sbtclient] trait PlayDevServer extends Closeable {
@@ -434,46 +446,18 @@ object ForkRunner {
         sys.exit(-1)
     }
   }
-
-  def onCompile(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):WatchHandler[PlayForkSupportResult] = {
-    result match {
-      case Success(x) =>
-        println(s"BuildValue: $x")
-      case Failure(x) =>
-        println(s"Failed: $x")
-    }
-
-    WatchHandler(onCompile _)
-  }
-
-  val defaultCompileHandler = WatchHandler(onCompile _)
-
 }
 
-class WithScopedKey(client:SbtClient,keyName:String) {
-  def run(body:ScopedKey => Unit):Unit = {
-    val compileKeysFuture = client.lookupScopedKey(keyName)
-    compileKeysFuture.map(x => body(x.head))
-  }
-}
-
-class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Either[Throwable,PlayForkSupportResult]) => ForkRunner.PlayDevServer) {
+final class ForkRunner(config:ForkRunner.Config) extends Actor with ActorLogging {
   import ForkRunner._, SbtSerializers._
 
-  @volatile private var client:SbtClient = _
-  @volatile private var compileKey:ScopedKey = _
-  @volatile private var server:ForkRunner.PlayDevServer = _
-  private val resultPromise:AtomicReference[Promise[Either[Throwable,PlayForkSupportResult]]] = new AtomicReference(null)
+  val connectorProxy = context.actorOf(SbtConnectionProxy.props(config.connector))
 
-  private def runReload():Either[Throwable,PlayForkSupportResult] = {
-    val empty = Promise[Either[Throwable,PlayForkSupportResult]]()
-    val expected = if (resultPromise.compareAndSet(null, empty)) {
-      empty
-    } else {
-      resultPromise.getAndSet(null)
-    }
+  private def runReload(self:ActorRef)():Either[Throwable,PlayForkSupportResult] = {
+    val expected = Promise[Either[Throwable,PlayForkSupportResult]]()
+    log.debug(s"Requesting reload")
+    self.tell(Reload(expected),self)
     val f = expected.future
-    client.requestExecution(command,None)
     Await.ready(f,3.minutes)
     f.value.get match {
       case Success(v) => v
@@ -481,107 +465,93 @@ class CompileRunner(command:String, consumer:PlayForkSupportResult => (() => Eit
     }
   }
 
-  private def first(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):WatchHandler[PlayForkSupportResult] = {
-    println(s"***************** --> First time response")
+  private def reloading(client:ActorRef,command:ScopedKey,server:PlayDevServer, expected:Promise[Either[Throwable,PlayForkSupportResult]]):Receive = {
+    log.debug(s"Doing reload")
+    client ! SbtClientProxy.RequestExecution.ByScopedKey(command,None,self)
 
-    this.client = client
-    this.compileKey = compileKey
-    result match {
-      case Success(x) =>
-        println(s"BuildValue: $x")
-        server = consumer(x)(runReload _)
-      case Failure(x) =>
-        println(s"Failed: $x")
-        sys.exit(-1)
-    }
-    WatchHandler(running _)
-  }
-
-  def unwrapExceptions(in:Throwable, prefix:String = ""):String = {
-    val c = in.getCause match {
-      case null => ""
-      case e => unwrapExceptions(e,prefix + "  ")
-    }
-    s"$prefix${in.getClass.getName}\n"+c
-  }
-
-  private def running(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):WatchHandler[PlayForkSupportResult] = {
-    println(s"***************** --> Normal RUNNING handler")
-    result match {
-      case Success(x) =>
-        resultPromise.get match {
-          case null =>
-            println("nobody is listening")
-          case p =>
-            println("set value")
-            p.trySuccess(Right(x))
-            resultPromise.set(null)
+    {
+      case SbtClientProxy.WatchEvent(command, result) =>
+        result.resultWithCustomThrowable[PlayForkSupportResult,CompileFailedException] match {
+          case Success(x) =>
+            expected.success(Right(x))
+          case Failure(x:CompileFailedException) =>
+            expected.success(Left(x))
+          case Failure(x) =>
+            log.error(s"Unknown failure: x")
+            expected.success(Left(x))
         }
-      case Failure(x) =>
-        println(s"Failed: $x\n-- Cause:\n${unwrapExceptions(x)}")
-        x match {
-          case x:CompileFailedException =>
-          resultPromise.get match {
-            case null =>
-              println("nobody is listening")
-            case p =>
-              println("set value")
-              p.trySuccess(Left(x))
-              resultPromise.set(null)
-          }
-          case _ =>
-            println(s"[Ignoring: $x]")
+        context.become(waitingForReload(client,command,server))
+    }
+  }
+
+  private def waitingForReload(client:ActorRef,command:ScopedKey,server:PlayDevServer):Receive = {
+    case Reload(expected) =>
+      log.debug(s"Got reload")
+      context.become(reloading(client,command,server,expected))
+  }
+
+  private def initialBuild(client:ActorRef,command:ScopedKey):Receive = {
+    client ! SbtClientProxy.WatchTask(TaskKey[PlayForkSupportResult](command),self)
+
+    {
+      case SbtClientProxy.WatchingTask(_) =>
+        log.debug(s"Doing initial build")
+        client ! SbtClientProxy.RequestExecution.ByScopedKey(command,None,self)
+      case SbtClientProxy.WatchEvent(command, TaskSuccess(result)) =>
+        log.debug(s"Got successful result from initial build: $result")
+        result.value[PlayForkSupportResult] match {
+          case Some(r) =>
+            log.debug("Starting server")
+            val server = config.serverBuilder(r)(runReload(self)_)
+            context.become(waitingForReload(client,command,server))
+          case None =>
+            log.error(s"could not decode result into PlayForkSupportResult[terminating]: $result")
+            exit()
         }
-    }
-    WatchHandler(running _)
-  }
-
-  val initialBehavior = WatchHandler(first _)
-}
-
-class ForkRunner(config:ForkRunner.Config)(compileHandler:ForkRunner.WatchHandler[PlayForkSupportResult] = ForkRunner.defaultCompileHandler) {
-  import ForkRunner._, SbtSerializers._
-
-  private var current = compileHandler
-
-  private def withCompileKey(client:SbtClient)(body:ScopedKey => Unit):Unit = {
-    val wsk = new WithScopedKey(client,s"${config.project}/play-default-fork-run-support")
-    wsk.run(body)
-  }
-
-  def onCompile(client:SbtClient,compileKey:ScopedKey)(result:Try[PlayForkSupportResult]):Unit = this.synchronized {
-    val next = current(client,compileKey)(result)
-    current = next
-  }
-
-  private def onConnect(client:SbtClient):Unit = {
-    println("Connecting...")
-    client handleEvents { msg =>
-      System.out.println(msg)
-      msg match {
-        case CompilationFailure(taskId, failure) =>
-          println(s"                        CompilationFailure($taskId, $failure)")
-         case _ =>
-      }
-    }
-    withCompileKey(client){ compileKey =>
-      println(s"withCompileKey: $compileKey")
-      val loc = onCompile(client,compileKey)_
-      client.rawWatch(TaskKey[PlayForkSupportResult](compileKey))((_,r) => loc(r.resultWithCustomThrowable[PlayForkSupportResult, CompileFailedException]))
-      client.requestExecution(s"${config.project}/play-default-fork-run-support",None)
+      case SbtClientProxy.WatchEvent(command, TaskFailure(result)) =>
+        log.error(s"Got failure on initial build.  Cannot continue[terminating]: ${result.stringValue}")
+        exit()
     }
   }
 
-  private def onError(reconnect:Boolean,error:String):Unit = {
-    println("Exiting!!")
-    sys.exit(-1)
+  private def lookupKey(client:ActorRef):Receive = {
+     client ! SbtClientProxy.LookupScopedKey(config.command,self)
+
+    {
+      case SbtClientProxy.LookupScopedKeyResponse(command,Success(keys)) =>
+        log.debug(s"Retrirved key.  Doing initial build")
+        context.become(initialBuild(client,keys.head))
+      case SbtClientProxy.LookupScopedKeyResponse(command,Failure(error)) =>
+        log.error(s"Could not look up command[terminating]: $command - received: $error")
+        exit()
+    }
   }
 
-  def run():Unit = {
-    println("Running...")
-    val conn = SbtConnector("play-fork","play-fork",config.projectDir)
-    val subs = conn.openChannel(channel => onConnect(SbtClient(channel)),
-                                onError)
-    println("Done")
+  private def exiting:Receive = {
+    connectorProxy ! SbtConnectionProxy.Close(self)
+
+    {
+      case SbtConnectionProxy.Closed =>
+        context stop self
+        config.latch.countDown()
+    }
+  }
+
+  private def exit():Unit = context.become(exiting)
+
+  private def waitForClient:Receive = {
+    case SbtConnectionProxy.NewClientResponse.Connected(client) =>
+      log.debug(s"Got client. Looking up key for ${config.command}")
+      context.become(lookupKey(client))
+    case SbtConnectionProxy.NewClientResponse.Error(true,error) =>
+      log.warning(s"recoverable error getting client: $error")
+    case SbtConnectionProxy.NewClientResponse.Error(false,error) =>
+      log.error(s"could not get client[terminating]: $error")
+      exit()
+  }
+
+  def receive:Receive = {
+    connectorProxy ! SbtConnectionProxy.NewClient(self)
+    waitForClient
   }
 }

@@ -22,6 +22,8 @@ object SbtClientBuilder {
   }
   case class Reconnect(subscription:sbt.client.Subscription,client:SbtClient, builder:ActorRef)
   case class Disconnect(subscription:sbt.client.Subscription,builder:ActorRef)
+
+  def props(request:SbtConnectionProxy.NewClient, notificationSink:ActorRef):Props = Props(new SbtClientBuilder(request,notificationSink))
 }
 
 final class SbtClientBuilder(request:SbtConnectionProxy.NewClient, notificationSink:ActorRef) extends Actor with ActorLogging {
@@ -93,6 +95,17 @@ object SbtConnectionProxy {
 
   case class State(clients:Map[ActorRef,ClientSubscription] = Map.empty[ActorRef,ClientSubscription])
 
+  def props(connector: SbtConnector,
+            createClient:SbtChannel => SbtClient = SbtClient.apply,
+            builderProps:(SbtConnectionProxy.NewClient,ActorRef) => Props = (nc,ns) => SbtClientBuilder.props(nc,ns),
+            clientProps:SbtClient => Props = c => SbtClientProxy.props(c)(scala.concurrent.ExecutionContext.Implicits.global),
+            notificationSink:SbtConnectionProxy.Notification => Unit  = _ => ())(implicit ex:ExecutionContext):Props =
+    Props(new SbtConnectionProxy(connector = connector,
+                                 createClient = createClient,
+                                 builderProps = builderProps,
+                                 clientProps = clientProps,
+                                 ec = ex,
+                                 notificationSink = notificationSink))
 }
 
 final class SbtConnectionProxy(connector: SbtConnector,
