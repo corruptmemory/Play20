@@ -147,11 +147,61 @@ class SbtClientProxySpec extends Specification with NoTimeConversions {
 
           system stop forwarder
 
+          expectMsg(SbtClientProxy.Notifications.HandledTermination)
+
           client.sendWatchEvent(sampleScopedKey1,sampleTaskResult)
           client.sendWatchEvent(sampleScopedKey,sampleTaskResult)
           client.sendBuildStructureUpdate(sampleBuild)
           client.sendEvent(sampleEvent)
           expectNoMsg()
+        }
+      }
+    }
+    "properly handle reconnect" in new AkkaTestKitHelper() {
+      withFakeSbtClient(scopedKeyLookup = sampleScopedKeyLookup) { client =>
+        withSbtClientProxy(client) { cp =>
+          client.sendWatchEvent(sampleScopedKey1,sampleTaskResult)
+          client.sendWatchEvent(sampleScopedKey,sampleTaskResult)
+          client.sendBuildStructureUpdate(sampleBuild)
+          client.sendEvent(sampleEvent)
+          expectNoMsg()
+
+          cp ! WatchSetting(sampleSettingKey,testActor)
+          expectMsgType[WatchingSetting] must be equalTo WatchingSetting(sampleSettingKey)
+          cp ! WatchTask(sampleTaskKey,testActor)
+          expectMsgType[WatchingTask] must be equalTo WatchingTask(sampleTaskKey)
+          cp ! SubscribeToBuild(testActor)
+          expectMsgType[BuildSubscribed.type] must be equalTo BuildSubscribed
+          cp ! SubscribeToEvents(testActor)
+          expectMsgType[EventsSubscribed.type] must be equalTo EventsSubscribed
+
+          client.sendWatchEvent(sampleScopedKey,sampleTaskResult)
+          expectMsgType[WatchEvent] must be equalTo WatchEvent(sampleScopedKey, sampleTaskResult)
+
+          client.sendWatchEvent(sampleScopedKey1,sampleTaskResult)
+          expectMsgType[WatchEvent] must be equalTo WatchEvent(sampleScopedKey1, sampleTaskResult)
+
+          client.sendBuildStructureUpdate(sampleBuild)
+          expectMsgType[protocol.MinimalBuildStructure] must be equalTo sampleBuild
+
+          client.sendEvent(sampleEvent)
+          expectMsgType[protocol.Event] must be equalTo sampleEvent
+
+          cp ! UpdateClient(client)
+
+          expectMsg(SbtClientProxy.Notifications.Reconnected)
+
+          client.sendWatchEvent(sampleScopedKey,sampleTaskResult)
+          expectMsgType[WatchEvent] must be equalTo WatchEvent(sampleScopedKey, sampleTaskResult)
+
+          client.sendWatchEvent(sampleScopedKey1,sampleTaskResult)
+          expectMsgType[WatchEvent] must be equalTo WatchEvent(sampleScopedKey1, sampleTaskResult)
+
+          client.sendBuildStructureUpdate(sampleBuild)
+          expectMsgType[protocol.MinimalBuildStructure] must be equalTo sampleBuild
+
+          client.sendEvent(sampleEvent)
+          expectMsgType[protocol.Event] must be equalTo sampleEvent
         }
       }
     }

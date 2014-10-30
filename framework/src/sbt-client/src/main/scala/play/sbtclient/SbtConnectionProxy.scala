@@ -155,6 +155,9 @@ final class SbtConnectionProxy(connector: SbtConnector,
     {
       case SbtClientProxy.Closed =>
         context.become(closing(request,awaiting - sender))
+      case req:LocalRequest[_] =>
+        log.warning(s"Received request $req while closing")
+        req.sendTo ! Closing
       case msg =>
         log.warning(s"Received $msg while closing")
         sender ! Closing

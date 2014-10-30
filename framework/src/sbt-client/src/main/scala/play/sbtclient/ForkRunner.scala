@@ -468,7 +468,7 @@ final class ForkRunner(config:ForkRunner.Config) extends Actor with ActorLogging
           case Failure(x:CompileFailedException) =>
             expected.success(Left(x))
           case Failure(x) =>
-            log.error(s"Unknown failure: x")
+            log.error(s"Unknown failure: $x")
             expected.success(Left(x))
         }
         context.become(waitingForReload(client,command,server))
