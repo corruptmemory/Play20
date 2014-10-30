@@ -19,8 +19,8 @@ object AkkaTestKitHelper {
   val configString =
     """
       |akka {
-      |  loglevel = "DEBUG"
-      |  stdout-loglevel = "DEBUG"
+      |  loglevel = "OFF"
+      |  stdout-loglevel = "OFF"
       |}
     """.stripMargin
 

@@ -23,6 +23,7 @@ import scala.concurrent.duration._
 import scala.util.{ Try, Success, Failure }
 import akka.actor._
 import com.typesafe.config.{ ConfigFactory, Config }
+import akka.event.LoggingAdapter
 
 object SbtSerializers {
   import play.api.libs.json._
@@ -91,8 +92,6 @@ object ForkRunner {
 
   // reloaderClassLoader: ClassLoaderCreator
   def delegatedResourcesClassLoaderCreator(name:String, urls:Array[URL], parent:ClassLoader):ClassLoader = {
-    println(s"^^^^^^^^^^^^^^^^^ New classloader: $name")
-
     new java.net.URLClassLoader(urls, parent) {
       require(parent ne null)
       override def getResources(name: String): java.util.Enumeration[java.net.URL] = getParent.getResources(name)
@@ -171,7 +170,6 @@ object ForkRunner {
 
       // Create the watcher, updates the changed boolean when a file has changed.
       private val watcher = playWatchService.watch(monitoredFiles.map(new File(_)), () => {
-        println(s">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> File changed!!!!")
         changed = true
       })
       private val classLoaderVersion = new java.util.concurrent.atomic.AtomicInteger(0)
@@ -281,7 +279,6 @@ object ForkRunner {
         in match {
           case e: play.api.PlayException => e
           case e: CompileFailedException =>
-          println(s"OH YEAH: ERROR!!!! --> $e")
             getProblems(e)
               .find(_.severity == xsbti.Severity.Error)
               .map(CompilationException)
@@ -290,13 +287,9 @@ object ForkRunner {
         }
       }
 
+      // TODO - Cannot implement in the forked running mode
       def runTask(task: String): AnyRef = {
         null
-        // val parser = Act.scopedKeyParser(state)
-        // val Right(sk) = complete.DefaultParsers.result(parser, task)
-        // val result = Project.runTask(sk.asInstanceOf[Def.ScopedKey[Task[AnyRef]]], state).map(_._2)
-
-        // result.flatMap(_.toEither.right.toOption).orNull
       }
 
       def close() = {
@@ -304,6 +297,8 @@ object ForkRunner {
         currentAnalysis = None
         watcher.stop()
       }
+
+      def isForked():Boolean = true
 
       def getClassLoader = currentApplicationClassLoader
     }
@@ -326,26 +321,18 @@ object ForkRunner {
     }
   }
 
-  object SillyLogger extends LoggerProxy {
-    def verbose(message: => String): Unit = System.err.println(s"[verbose]: $message")
-    def debug(message: => String): Unit = System.err.println(s"[debug]: $message")
-    def info(message: => String): Unit = System.err.println(s"[info]: $message")
-    def warn(message: => String): Unit = System.err.println(s"[warn]: $message")
-    def error(message: => String): Unit = System.err.println(s"[error]: $message")
-    def trace(t: => Throwable): Unit = System.err.println(s"[trace]: $t")
-    def success(message: => String): Unit = System.err.println(s"[success]: $message")
+  def wrapLogger(logger:LoggingAdapter):LoggerProxy = new LoggerProxy {
+    def verbose(message: => String): Unit = logger.debug(message)
+    def debug(message: => String): Unit = logger.debug(message)
+    def info(message: => String): Unit = logger.info(message)
+    def warn(message: => String): Unit = logger.warning(message)
+    def error(message: => String): Unit = logger.error(message)
+    def trace(t: => Throwable): Unit = logger.error(t,"trace")
+    def success(message: => String): Unit = logger.info(message)
   }
 
   object AkkaConfig {
-    val configString =
-      """
-        |akka {
-        |  loglevel = "DEBUG"
-        |  stdout-loglevel = "DEBUG"
-        |}
-      """.stripMargin
-
-    val config = ConfigFactory.parseString(configString)
+    val config = ConfigFactory.load("play-dev")
   }
 
   def main(args:Array[String]):Unit = {
@@ -357,24 +344,28 @@ object ForkRunner {
     val httpsPort:Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
 
-    println(s"WOO HOO! Forking!!!")
-    println(s"baseDirectoryString: $baseDirectoryString")
-    println(s"buildUriString: $buildUriString")
-    println(s"targetDirectory: $targetDirectory")
-    println(s"project: $project")
-    println(s"httpPort: $httpPort")
-    println(s"httpsPort: $httpsPort")
-    println(s"pollDelayMillis: $pollDelayMillis")
+    val system = ActorSystem("play-dev-mode-runner",AkkaConfig.config)
+    val log = system.log
+    log.debug(s"Forked Play dev-mode runner started")
+    log.debug(s"baseDirectoryString: $baseDirectoryString")
+    log.debug(s"buildUriString: $buildUriString")
+    log.debug(s"targetDirectory: $targetDirectory")
+    log.debug(s"project: $project")
+    log.debug(s"httpPort: $httpPort")
+    log.debug(s"httpsPort: $httpsPort")
+    log.debug(s"pollDelayMillis: $pollDelayMillis")
 
     val latch = new CountDownLatch(1)
-    val system = ActorSystem("play-dev-mode-runner",AkkaConfig.config)
     val projectDir = new File(baseDirectoryString)
     val conn = SbtConnector("play-fork","play-fork",projectDir)
-    val serverBuilder = runServer(httpPort,httpsPort,new File(buildUriString), new File(targetDirectory), pollDelayMillis, SillyLogger)_
+    val serverBuilder = runServer(httpPort,httpsPort,new File(buildUriString), new File(targetDirectory), pollDelayMillis, wrapLogger(log))_
     val config = Config(conn,latch,s"$project/play-default-fork-run-support", projectDir, new URI(buildUriString), project, serverBuilder)
     val runner = system.actorOf(Props(new ForkRunner(config)))
+    log.debug("Awaiting ForkRunner shutdown")
     latch.await()
+    log.debug("Exiting, awaiting actor system shutdown")
     system.shutdown()
+    log.debug("Exited.")
   }
 
   private[sbtclient] trait PlayDevServer extends Closeable {

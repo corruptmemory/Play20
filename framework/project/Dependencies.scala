@@ -74,11 +74,19 @@ object Dependencies {
     "org.easytesting" % "fest-assert" % "1.4" % "test",
     mockitoAll % "test")
 
-  val runtime = Seq(
+  val minimumRuntime = Seq(
     "io.netty" % "netty" % "3.9.3.Final",
 
     "com.typesafe.netty" % "netty-http-pipelining" % "1.1.2",
 
+    "joda-time" % "joda-time" % "2.3",
+    "org.joda" % "joda-convert" % "1.6",
+
+    "com.typesafe.akka" %% "akka-actor" % "2.3.4") ++
+    specsBuild.map(_ % "test") ++
+    javaTestDeps
+
+  val runtime = minimumRuntime ++ Seq(
     "org.slf4j" % "slf4j-api" % "1.7.6",
     "org.slf4j" % "jul-to-slf4j" % "1.7.6",
     "org.slf4j" % "jcl-over-slf4j" % "1.7.6",
@@ -86,14 +94,10 @@ object Dependencies {
     "ch.qos.logback" % "logback-core" % "1.1.1",
     "ch.qos.logback" % "logback-classic" % "1.1.1",
 
-    "com.typesafe.akka" %% "akka-actor" % "2.3.4",
     "com.typesafe.akka" %% "akka-slf4j" % "2.3.4",
 
     "org.scala-stm" %% "scala-stm" % "0.7",
     "commons-codec" % "commons-codec" % "1.9",
-
-    "joda-time" % "joda-time" % "2.3",
-    "org.joda" % "joda-convert" % "1.6",
 
     "org.apache.commons" % "commons-lang3" % "3.1",
 
@@ -133,36 +137,12 @@ object Dependencies {
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
 
-  val sbtClientDependencies = Seq(
-    "org.scala-lang" % "scala-reflect" % BuildSettings.buildScalaVersionForSbt % "provided",
+  val sbtClientDependencies = minimumRuntime ++ Seq(
     typesafeConfig,
-    "org.mozilla" % "rhino" % "1.7R4",
-
-    ("com.google.javascript" % "closure-compiler" % "v20130603")
-      .exclude("args4j", "args4j")
-      .exclude("com.google.protobuf", "protobuf-java")
-      .exclude("com.google.code.findbugs", "jsr305"),
-
     "com.typesafe.akka" %% "akka-testkit" % "2.3.4" % "test",
 
-    guava,
-
-    "org.avaje.ebeanorm" % "avaje-ebeanorm-agent" % "3.2.2" exclude ("javax.persistence", "persistence-api"),
-
-    h2database,
-    "org.javassist" % "javassist" % "3.18.2-GA",
-
-    "net.contentobjects.jnotify" % "jnotify" % "0.94",
-
-    sbtPluginDep("com.typesafe.sbt" % "sbt-twirl" % "1.0.2"),
-
-    sbtPluginDep("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.4.0"),
-    sbtPluginDep("com.github.mpeltonen" % "sbt-idea" % "1.5.1"),
-    sbtPluginDep("com.typesafe.sbt" % "sbt-native-packager" % "0.7.4"),
-
-    sbtPluginDep("com.typesafe.sbt" % "sbt-js-engine" % "1.0.1"),
-    sbtPluginDep("com.typesafe.sbt" % "sbt-webdriver" % "1.0.0")
-  ) ++ specsSbt.map(_ % "test")
+    sbtPluginDep("com.typesafe.sbt" % "sbt-twirl" % "1.0.2")
+  )
 
   val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
 

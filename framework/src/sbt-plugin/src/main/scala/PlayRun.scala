@@ -136,17 +136,17 @@ trait PlayRun extends PlayInternalKeys {
                     pollDelayMillis: Int,
                     args: Seq[String]):Unit = {
 
-    logger.info(s"baseDirectory: $baseDirectory")
-    logger.info(s"projectDirectory: $projectDirectory")
-    logger.info(s"projectRef: $projectRef")
-    logger.info(s"javaOptions: $javaOptions")
-    logger.info(s"dependencyClasspath: $dependencyClasspath")
-    logger.info(s"monitoredFiles: $monitoredFiles")
-    logger.info(s"targetDirectory: $targetDirectory")
-    logger.info(s"docsClasspath: $docsClasspath")
-    logger.info(s"defaultHttpPort: $defaultHttpPort")
-    logger.info(s"pollDelayMillis: $pollDelayMillis")
-    logger.info(s"args: $args")
+    logger.debug(s"baseDirectory: $baseDirectory")
+    logger.debug(s"projectDirectory: $projectDirectory")
+    logger.debug(s"projectRef: $projectRef")
+    logger.debug(s"javaOptions: $javaOptions")
+    logger.debug(s"dependencyClasspath: $dependencyClasspath")
+    logger.debug(s"monitoredFiles: $monitoredFiles")
+    logger.debug(s"targetDirectory: $targetDirectory")
+    logger.debug(s"docsClasspath: $docsClasspath")
+    logger.debug(s"defaultHttpPort: $defaultHttpPort")
+    logger.debug(s"pollDelayMillis: $pollDelayMillis")
+    logger.debug(s"args: $args")
 
     val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
                                     runJVMOptions = javaOptions)
