@@ -30,7 +30,7 @@ object SbtSerializers {
   import play.api.data.validation.ValidationError
   import sbt.protocol._
 
- def fileFromString(s: String): Option[java.io.File] =
+  def fileFromString(s: String): Option[java.io.File] =
     try Some(new java.io.File(new java.net.URI(s)))
     catch {
       case e: Exception => None
@@ -43,25 +43,25 @@ object SbtSerializers {
   }
   implicit val fileWrites = Writes[java.io.File](f => JsString(fileToString(f)))
 
-  implicit def tuple2Reads[A,B](implicit aReads:Reads[A], bReads:Reads[B]):Reads[(A,B)] = Reads[(A,B)] { i =>
-    i.validate[JsArray].flatMap{ arr =>
+  implicit def tuple2Reads[A, B](implicit aReads: Reads[A], bReads: Reads[B]): Reads[(A, B)] = Reads[(A, B)] { i =>
+    i.validate[JsArray].flatMap { arr =>
       val s = aReads.reads(arr(0))
       val f = bReads.reads(arr(1))
-      (s,f) match {
-        case (JsSuccess(a,_),JsSuccess(b,_)) => JsSuccess((a,b))
-        case (a @ JsError(_),JsSuccess(_,_)) => a
-        case (JsSuccess(_,_),b @ JsError(_)) => b
-        case (a @ JsError(_),b @ JsError(_)) => a ++ b
+      (s, f) match {
+        case (JsSuccess(a, _), JsSuccess(b, _)) => JsSuccess((a, b))
+        case (a @ JsError(_), JsSuccess(_, _)) => a
+        case (JsSuccess(_, _), b @ JsError(_)) => b
+        case (a @ JsError(_), b @ JsError(_)) => a ++ b
       }
     }
   }
 
-  implicit def tuple2Writes[A,B](implicit aWrites:Writes[A], bWrites:Writes[B]):Writes[(A,B)] =
-    Writes[(A,B)] { case (s,f) => JsArray(Seq(aWrites.writes(s),bWrites.writes(f))) }
+  implicit def tuple2Writes[A, B](implicit aWrites: Writes[A], bWrites: Writes[B]): Writes[(A, B)] =
+    Writes[(A, B)] { case (s, f) => JsArray(Seq(aWrites.writes(s), bWrites.writes(f))) }
 
-  implicit val playForkSupportResultWrites:Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
-  implicit val playForkSupportResultReads:Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
-  implicit val playForkSupportResultFormat:Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads,playForkSupportResultWrites)
+  implicit val playForkSupportResultWrites: Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
+  implicit val playForkSupportResultReads: Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
+  implicit val playForkSupportResultFormat: Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads, playForkSupportResultWrites)
 }
 
 /**
@@ -123,18 +123,18 @@ trait PlayRun extends PlayInternalKeys {
   val playDefaultRunTask = playRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
     playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
 
-  def playRunForked(logger:Logger,
-                    baseDirectory:File,
-                    projectDirectory:File,
-                    projectRef:ProjectRef,
-                    javaOptions: Seq[String],
-                    dependencyClasspath: Classpath,
-                    monitoredFiles: Seq[String],
-                    targetDirectory: File,
-                    docsClasspath: Classpath,
-                    defaultHttpPort: Int,
-                    pollDelayMillis: Int,
-                    args: Seq[String]):Unit = {
+  def playRunForked(logger: Logger,
+    baseDirectory: File,
+    projectDirectory: File,
+    projectRef: ProjectRef,
+    javaOptions: Seq[String],
+    dependencyClasspath: Classpath,
+    monitoredFiles: Seq[String],
+    targetDirectory: File,
+    docsClasspath: Classpath,
+    defaultHttpPort: Int,
+    pollDelayMillis: Int,
+    args: Seq[String]): Unit = {
 
     logger.debug(s"baseDirectory: $baseDirectory")
     logger.debug(s"projectDirectory: $projectDirectory")
@@ -149,7 +149,7 @@ trait PlayRun extends PlayInternalKeys {
     logger.debug(s"args: $args")
 
     val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
-                                    runJVMOptions = javaOptions)
+      runJVMOptions = javaOptions)
     val runner = new ForkRun(runnerOptions)
     val baseDirectoryString = baseDirectory.getAbsolutePath()
     val buildUriString = projectRef.build.toString
@@ -249,11 +249,11 @@ trait PlayRun extends PlayInternalKeys {
 
   val playDefaultForkRunSupportTask = playForkRunSupportTask(playReload in Compile, playDependencyClasspath, playReloaderClasspath)
 
-  def findCompilationFailure(in:Throwable):Option[xsbti.CompileFailed] = in match {
+  def findCompilationFailure(in: Throwable): Option[xsbti.CompileFailed] = in match {
     case null => None
-    case Incomplete(_ , _, _, causes, directCause) =>
+    case Incomplete(_, _, _, causes, directCause) =>
       (causes.foldLeft[Option[xsbti.CompileFailed]](None) {
-        case (None,v) => findCompilationFailure(v)
+        case (None, v) => findCompilationFailure(v)
         case (x, _) => x
       }) orElse directCause.flatMap {
         case x: xsbti.CompileFailed => Some(x)
@@ -271,7 +271,7 @@ trait PlayRun extends PlayInternalKeys {
    * Do not change its signature without first consulting the Activator team.  Do not change its signature in a minor
    * release.
    */
-  def playForkRunSupportTask(compile:TaskKey[sbt.inc.Analysis], dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[Task[PlayForkSupportResult]] = Def.task {
+  def playForkRunSupportTask(compile: TaskKey[sbt.inc.Analysis], dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[Task[PlayForkSupportResult]] = Def.task {
     val state = Keys.state.value
     val log = state.log
 
@@ -287,35 +287,34 @@ trait PlayRun extends PlayInternalKeys {
     val docsResultEither = (managedClasspath in DocsApplication).result.value.toEither
 
     (compileResultEither,
-     dependencyClasspathResultEither,
-     reloaderClasspathResultEither,
-     playAllAssetsResultEither,
-     playMonitoredFilesResultEither,
-     docsResultEither) match {
-      case (Right(compileValue),Right(dependencyClasspathValue),Right(reloaderClasspathValue),Right(playAllAssetsValue),Right(playMonitoredFilesValue),Right(docsValue)) =>
-        PlayForkSupportResult(sbt.server.SbtToProtocolUtils.analysisToProtocol(compileValue),
-                              dependencyClasspathValue.map(_.data),
-                              reloaderClasspathValue.map(_.data),
-                              playAllAssetsValue,
-                              playMonitoredFilesValue,
-                              devSettings.value,
-                              docsValue.map(_.data))
-      case (Left(i),_,_,_,_,_) =>
-        val ex = findCompilationFailure(i)
-        log.info("------------------------------")
-        log.info(s"Compile failed: $i => $ex")
-        log.info("------------------------------")
-        if (ex.isDefined) throw ex.get
-        else throw i
-      case (_,_,_,_,_,_) =>
-        log.info("------------------------------")
-        log.info(s"Something else went wrong!!!!!")
-        log.info("------------------------------")
-        throw new Exception("WFT?")
-    }
+      dependencyClasspathResultEither,
+      reloaderClasspathResultEither,
+      playAllAssetsResultEither,
+      playMonitoredFilesResultEither,
+      docsResultEither) match {
+        case (Right(compileValue), Right(dependencyClasspathValue), Right(reloaderClasspathValue), Right(playAllAssetsValue), Right(playMonitoredFilesValue), Right(docsValue)) =>
+          PlayForkSupportResult(sbt.server.SbtToProtocolUtils.analysisToProtocol(compileValue),
+            dependencyClasspathValue.map(_.data),
+            reloaderClasspathValue.map(_.data),
+            playAllAssetsValue,
+            playMonitoredFilesValue,
+            devSettings.value,
+            docsValue.map(_.data))
+        case (Left(i), _, _, _, _, _) =>
+          val ex = findCompilationFailure(i)
+          log.info("------------------------------")
+          log.info(s"Compile failed: $i => $ex")
+          log.info("------------------------------")
+          if (ex.isDefined) throw ex.get
+          else throw i
+        case (_, _, _, _, _, _) =>
+          log.info("------------------------------")
+          log.info(s"Something else went wrong!!!!!")
+          log.info("------------------------------")
+          throw new Exception("WFT?")
+      }
 
   }
-
 
   /**
    * Monitor changes in ~run mode.

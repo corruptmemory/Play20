@@ -11,9 +11,9 @@ import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess,
 import scala.concurrent.ExecutionContext.Implicits.global
 import play.runsupport.protocol.PlayForkSupportResult
 import play.core.{ BuildLink, BuildDocHandler }
-import play.core.classloader.{DelegatingClassLoader, ApplicationClassLoaderProvider}
-import scala.concurrent.{Promise, Future}
-import play.runsupport.{PlayWatchService, LoggerProxy, AssetsClassLoader}
+import play.core.classloader.{ DelegatingClassLoader, ApplicationClassLoaderProvider }
+import scala.concurrent.{ Promise, Future }
+import play.runsupport.{ PlayWatchService, LoggerProxy, AssetsClassLoader }
 import sbt.{ IO, PathFinder, WatchState, SourceModificationWatch }
 import scala.annotation.tailrec
 import java.util.concurrent.atomic.AtomicReference
@@ -31,7 +31,7 @@ object SbtSerializers {
   import play.api.data.validation.ValidationError
   import sbt.protocol._
 
- def fileFromString(s: String): Option[java.io.File] =
+  def fileFromString(s: String): Option[java.io.File] =
     try Some(new java.io.File(new java.net.URI(s)))
     catch {
       case e: Exception => None
@@ -44,24 +44,24 @@ object SbtSerializers {
   }
   implicit val fileWrites = Writes[java.io.File](f => JsString(fileToString(f)))
 
-  implicit def tuple2Reads[A,B](implicit aReads:Reads[A], bReads:Reads[B]):Reads[(A,B)] = Reads[(A,B)] { i =>
-    i.validate[JsArray].flatMap{ arr =>
+  implicit def tuple2Reads[A, B](implicit aReads: Reads[A], bReads: Reads[B]): Reads[(A, B)] = Reads[(A, B)] { i =>
+    i.validate[JsArray].flatMap { arr =>
       val s = aReads.reads(arr(0))
       val f = bReads.reads(arr(1))
-      (s,f) match {
-        case (JsSuccess(a,_),JsSuccess(b,_)) => JsSuccess((a,b))
-        case (a @ JsError(_),JsSuccess(_,_)) => a
-        case (JsSuccess(_,_),b @ JsError(_)) => b
-        case (a @ JsError(_),b @ JsError(_)) => a ++ b
+      (s, f) match {
+        case (JsSuccess(a, _), JsSuccess(b, _)) => JsSuccess((a, b))
+        case (a @ JsError(_), JsSuccess(_, _)) => a
+        case (JsSuccess(_, _), b @ JsError(_)) => b
+        case (a @ JsError(_), b @ JsError(_)) => a ++ b
       }
     }
   }
 
-  implicit def tuple2Writes[A,B](implicit aWrites:Writes[A], bWrites:Writes[B]):Writes[(A,B)] =
-    Writes[(A,B)] { case (s,f) => JsArray(Seq(aWrites.writes(s),bWrites.writes(f))) }
+  implicit def tuple2Writes[A, B](implicit aWrites: Writes[A], bWrites: Writes[B]): Writes[(A, B)] =
+    Writes[(A, B)] { case (s, f) => JsArray(Seq(aWrites.writes(s), bWrites.writes(f))) }
 
   // val playForkSupportResultWrites:Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
-  implicit val playForkSupportResultReads:Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
+  implicit val playForkSupportResultReads: Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
   // implicit val playForkSupportResultFormat:Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads,playForkSupportResultWrites)
 }
 
@@ -77,21 +77,21 @@ object ForkRunner {
     def getClassLoader: Option[ClassLoader]
   }
 
-  case class Reload(expected:Promise[Either[Throwable,PlayForkSupportResult]])
+  case class Reload(expected: Promise[Either[Throwable, PlayForkSupportResult]])
 
   import PlayExceptions._
 
   def urls(cp: Classpath): Array[URL] = cp.map(_.toURI.toURL).toArray
 
   // dependencyClassLoader: ClassLoaderCreator,
-  def uRLClassLoaderCreator(name:String, urls:Array[URL], parent:ClassLoader): ClassLoader = new java.net.URLClassLoader(urls, parent) {
+  def uRLClassLoaderCreator(name: String, urls: Array[URL], parent: ClassLoader): ClassLoader = new java.net.URLClassLoader(urls, parent) {
     override def toString = name + "{" + getURLs.map(_.toString).mkString(", ") + "}"
   }
 
-  def assetsClassLoader(parent:ClassLoader, allAssets: Seq[(String, File)]):ClassLoader = new AssetsClassLoader(parent, allAssets)
+  def assetsClassLoader(parent: ClassLoader, allAssets: Seq[(String, File)]): ClassLoader = new AssetsClassLoader(parent, allAssets)
 
   // reloaderClassLoader: ClassLoaderCreator
-  def delegatedResourcesClassLoaderCreator(name:String, urls:Array[URL], parent:ClassLoader):ClassLoader = {
+  def delegatedResourcesClassLoaderCreator(name: String, urls: Array[URL], parent: ClassLoader): ClassLoader = {
     new java.net.URLClassLoader(urls, parent) {
       require(parent ne null)
       override def getResources(name: String): java.util.Enumeration[java.net.URL] = getParent.getResources(name)
@@ -103,7 +103,7 @@ object ForkRunner {
     if (o.isDefined()) Some(o.get())
     else None
 
-  def routesPositionMapper(position: xsbti.Position):Option[xsbti.Position] = {
+  def routesPositionMapper(position: xsbti.Position): Option[xsbti.Position] = {
     position.sourceFile collect {
       case play.router.RoutesCompiler.MaybeGeneratedSource(generatedSource) => {
         new xsbti.Position {
@@ -131,7 +131,7 @@ object ForkRunner {
   private[this] var commonClassLoader: ClassLoader = _
 
   // commonClassLoader: ClassLoader
-  def playCommonClassloaderTask(classpath:Classpath) = {
+  def playCommonClassloaderTask(classpath: Classpath) = {
     lazy val commonJars: PartialFunction[java.io.File, java.net.URL] = {
       case jar if jar.getName.startsWith("h2-") || jar.getName == "h2.jar" => jar.toURI.toURL
     }
@@ -145,15 +145,15 @@ object ForkRunner {
     commonClassLoader
   }
 
-  def newReloader(runReload:() => Either[Throwable,PlayForkSupportResult],
+  def newReloader(runReload: () => Either[Throwable, PlayForkSupportResult],
     createClassLoader: ClassLoaderCreator,
     baseLoader: ClassLoader,
     monitoredFiles: Seq[String],
-    _projectPath:File,
-    devSettings:Seq[(String, String)],
+    _projectPath: File,
+    devSettings: Seq[(String, String)],
     playWatchService: PlayWatchService): PlayBuildLink = {
     new PlayBuildLink {
-      val projectPath:File = _projectPath
+      val projectPath: File = _projectPath
       // The current classloader for the application
       @volatile private var currentApplicationClassLoader: Option[ClassLoader] = None
       // Flag to force a reload on the next request.
@@ -202,26 +202,26 @@ object ForkRunner {
 
               currentAnalysis = Some(compilationResult.analysis)
 
-                // We only want to reload if the classpath has changed.  Assets don't live on the classpath, so
-                // they won't trigger a reload.
-                // Use the SBT watch service, passing true as the termination to force it to break after one check
-                val (_, newState) = SourceModificationWatch.watch(PathFinder.strict(compilationResult.reloaderClasspath).***, 0, watchState)(true)
-                // SBT has a quiet wait period, if that's set to true, sources were modified
-                val triggered = newState.awaitingQuietPeriod
-                watchState = newState
+              // We only want to reload if the classpath has changed.  Assets don't live on the classpath, so
+              // they won't trigger a reload.
+              // Use the SBT watch service, passing true as the termination to force it to break after one check
+              val (_, newState) = SourceModificationWatch.watch(PathFinder.strict(compilationResult.reloaderClasspath).***, 0, watchState)(true)
+              // SBT has a quiet wait period, if that's set to true, sources were modified
+              val triggered = newState.awaitingQuietPeriod
+              watchState = newState
 
-                if (triggered || shouldReload || currentApplicationClassLoader.isEmpty) {
+              if (triggered || shouldReload || currentApplicationClassLoader.isEmpty) {
 
-                  // Create a new classloader
-                  val version = classLoaderVersion.incrementAndGet
-                  val name = "ReloadableClassLoader(v" + version + ")"
-                  val urls = ForkRunner.urls(compilationResult.reloaderClasspath)
-                  val loader = createClassLoader(name, urls, baseLoader)
-                  currentApplicationClassLoader = Some(loader)
-                  loader
-                } else {
-                  null // null means nothing changed
-                }
+                // Create a new classloader
+                val version = classLoaderVersion.incrementAndGet
+                val name = "ReloadableClassLoader(v" + version + ")"
+                val urls = ForkRunner.urls(compilationResult.reloaderClasspath)
+                val loader = createClassLoader(name, urls, baseLoader)
+                currentApplicationClassLoader = Some(loader)
+                loader
+              } else {
+                null // null means nothing changed
+              }
             }.fold(identity, identity)
         } else {
           null // null means nothing changed
@@ -298,36 +298,36 @@ object ForkRunner {
         watcher.stop()
       }
 
-      def isForked():Boolean = true
+      def isForked(): Boolean = true
 
       def getClassLoader = currentApplicationClassLoader
     }
 
   }
 
-  case class Config(connector:SbtConnector,
-                    latch:CountDownLatch,
-                    command:String,
-                    projectDir:File,
-                    buildUri:URI,
-                    project: String,
-                    serverBuilder:PlayForkSupportResult => (() => Either[Throwable,PlayForkSupportResult]) => PlayDevServer)
+  case class Config(connector: SbtConnector,
+    latch: CountDownLatch,
+    command: String,
+    projectDir: File,
+    buildUri: URI,
+    project: String,
+    serverBuilder: PlayForkSupportResult => (() => Either[Throwable, PlayForkSupportResult]) => PlayDevServer)
 
   object Int {
-    def unapply(s : String) : Option[Int] = try {
+    def unapply(s: String): Option[Int] = try {
       Some(s.toInt)
     } catch {
-      case _ : java.lang.NumberFormatException => None
+      case _: java.lang.NumberFormatException => None
     }
   }
 
-  def wrapLogger(logger:LoggingAdapter):LoggerProxy = new LoggerProxy {
+  def wrapLogger(logger: LoggingAdapter): LoggerProxy = new LoggerProxy {
     def verbose(message: => String): Unit = logger.debug(message)
     def debug(message: => String): Unit = logger.debug(message)
     def info(message: => String): Unit = logger.info(message)
     def warn(message: => String): Unit = logger.warning(message)
     def error(message: => String): Unit = logger.error(message)
-    def trace(t: => Throwable): Unit = logger.error(t,"trace")
+    def trace(t: => Throwable): Unit = logger.error(t, "trace")
     def success(message: => String): Unit = logger.info(message)
   }
 
@@ -335,16 +335,16 @@ object ForkRunner {
     val config = ConfigFactory.load().getConfig("play-dev")
   }
 
-  def main(args:Array[String]):Unit = {
+  def main(args: Array[String]): Unit = {
     val baseDirectoryString = args(0)
     val buildUriString = args(1)
     val targetDirectory = args(2)
     val project = args(3)
-    val httpPort:Option[Int] = Int.unapply(args(4))
-    val httpsPort:Option[Int] = Int.unapply(args(5))
+    val httpPort: Option[Int] = Int.unapply(args(4))
+    val httpsPort: Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
 
-    val system = ActorSystem("play-dev-mode-runner",AkkaConfig.config)
+    val system = ActorSystem("play-dev-mode-runner", AkkaConfig.config)
     val log = system.log
     log.debug(s"Forked Play dev-mode runner started")
     log.debug(s"baseDirectoryString: $baseDirectoryString")
@@ -357,9 +357,9 @@ object ForkRunner {
 
     val latch = new CountDownLatch(1)
     val projectDir = new File(baseDirectoryString)
-    val conn = SbtConnector("play-fork","play-fork",projectDir)
-    val serverBuilder = runServer(httpPort,httpsPort,new File(buildUriString), new File(targetDirectory), pollDelayMillis, wrapLogger(log))_
-    val config = Config(conn,latch,s"$project/play-default-fork-run-support", projectDir, new URI(buildUriString), project, serverBuilder)
+    val conn = SbtConnector("play-fork", "play-fork", projectDir)
+    val serverBuilder = runServer(httpPort, httpsPort, new File(buildUriString), new File(targetDirectory), pollDelayMillis, wrapLogger(log))_
+    val config = Config(conn, latch, s"$project/play-default-fork-run-support", projectDir, new URI(buildUriString), project, serverBuilder)
     val runner = system.actorOf(Props(new ForkRunner(config)))
     log.debug("Awaiting ForkRunner shutdown")
     latch.await()
@@ -372,14 +372,12 @@ object ForkRunner {
     val buildLink: BuildLink
   }
 
-  def runServer(httpPort:Option[Int],
-                httpsPort:Option[Int],
-                projectPath:File,
-                targetDirectory: File,
-                pollDelayMillis: Int,
-                logger: LoggerProxy)
-                (in:PlayForkSupportResult)
-                (runReload:() => Either[Throwable,PlayForkSupportResult]):PlayDevServer = {
+  def runServer(httpPort: Option[Int],
+    httpsPort: Option[Int],
+    projectPath: File,
+    targetDirectory: File,
+    pollDelayMillis: Int,
+    logger: LoggerProxy)(in: PlayForkSupportResult)(runReload: () => Either[Throwable, PlayForkSupportResult]): PlayDevServer = {
     try {
       val buildLoader = this.getClass.getClassLoader
       val commonClassLoader = playCommonClassloaderTask(in.dependencyClasspath)
@@ -389,15 +387,15 @@ object ForkRunner {
       })
 
       lazy val applicationLoader = uRLClassLoaderCreator("PlayDependencyClassLoader", urls(in.dependencyClasspath), delegatingLoader)
-      lazy val assetsLoader = assetsClassLoader(applicationLoader,in.allAssets)
+      lazy val assetsLoader = assetsClassLoader(applicationLoader, in.allAssets)
 
-      lazy val reloader:PlayBuildLink = newReloader(runReload,
-                                                    delegatedResourcesClassLoaderCreator _,
-                                                    assetsLoader,
-                                                    in.monitoredFiles,
-                                                    projectPath,
-                                                    in.devSettings,
-                                                    PlayWatchService.default(targetDirectory,pollDelayMillis,logger))
+      lazy val reloader: PlayBuildLink = newReloader(runReload,
+        delegatedResourcesClassLoaderCreator _,
+        assetsLoader,
+        in.monitoredFiles,
+        projectPath,
+        in.devSettings,
+        PlayWatchService.default(targetDirectory, pollDelayMillis, logger))
 
       val docsLoader = new URLClassLoader(urls(in.docsClasspath), applicationLoader)
       val docsJarFile = {
@@ -439,62 +437,62 @@ object ForkRunner {
   }
 }
 
-final class ForkRunner(config:ForkRunner.Config) extends Actor with ActorLogging {
+final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLogging {
   import ForkRunner._, SbtSerializers._
 
   val connectorProxy = context.actorOf(SbtConnectionProxy.props(config.connector))
 
-  private def runReload(self:ActorRef)():Either[Throwable,PlayForkSupportResult] = {
-    val expected = Promise[Either[Throwable,PlayForkSupportResult]]()
+  private def runReload(self: ActorRef)(): Either[Throwable, PlayForkSupportResult] = {
+    val expected = Promise[Either[Throwable, PlayForkSupportResult]]()
     log.debug(s"Requesting reload")
-    self.tell(Reload(expected),self)
+    self.tell(Reload(expected), self)
     val f = expected.future
-    Await.ready(f,3.minutes)
+    Await.ready(f, 3.minutes)
     f.value.get match {
       case Success(v) => v
       case Failure(t) => Left(t)
     }
   }
 
-  private def reloading(client:ActorRef,command:ScopedKey,server:PlayDevServer, expected:Promise[Either[Throwable,PlayForkSupportResult]]):Receive = {
+  private def reloading(client: ActorRef, command: ScopedKey, server: PlayDevServer, expected: Promise[Either[Throwable, PlayForkSupportResult]]): Receive = {
     log.debug(s"Doing reload")
-    client ! SbtClientProxy.RequestExecution.ByScopedKey(command,None,self)
+    client ! SbtClientProxy.RequestExecution.ByScopedKey(command, None, self)
 
     {
       case SbtClientProxy.WatchEvent(command, result) =>
-        result.resultWithCustomThrowable[PlayForkSupportResult,CompileFailedException] match {
+        result.resultWithCustomThrowable[PlayForkSupportResult, CompileFailedException] match {
           case Success(x) =>
             expected.success(Right(x))
-          case Failure(x:CompileFailedException) =>
+          case Failure(x: CompileFailedException) =>
             expected.success(Left(x))
           case Failure(x) =>
             log.error(s"Unknown failure: $x")
             expected.success(Left(x))
         }
-        context.become(waitingForReload(client,command,server))
+        context.become(waitingForReload(client, command, server))
     }
   }
 
-  private def waitingForReload(client:ActorRef,command:ScopedKey,server:PlayDevServer):Receive = {
+  private def waitingForReload(client: ActorRef, command: ScopedKey, server: PlayDevServer): Receive = {
     case Reload(expected) =>
       log.debug(s"Got reload")
-      context.become(reloading(client,command,server,expected))
+      context.become(reloading(client, command, server, expected))
   }
 
-  private def initialBuild(client:ActorRef,command:ScopedKey):Receive = {
-    client ! SbtClientProxy.WatchTask(TaskKey[PlayForkSupportResult](command),self)
+  private def initialBuild(client: ActorRef, command: ScopedKey): Receive = {
+    client ! SbtClientProxy.WatchTask(TaskKey[PlayForkSupportResult](command), self)
 
     {
       case SbtClientProxy.WatchingTask(_) =>
         log.debug(s"Doing initial build")
-        client ! SbtClientProxy.RequestExecution.ByScopedKey(command,None,self)
+        client ! SbtClientProxy.RequestExecution.ByScopedKey(command, None, self)
       case SbtClientProxy.WatchEvent(command, TaskSuccess(result)) =>
         log.debug(s"Got successful result from initial build: $result")
         result.value[PlayForkSupportResult] match {
           case Some(r) =>
             log.debug("Starting server")
             val server = config.serverBuilder(r)(runReload(self)_)
-            context.become(waitingForReload(client,command,server))
+            context.become(waitingForReload(client, command, server))
           case None =>
             log.error(s"could not decode result into PlayForkSupportResult[terminating]: $result")
             exit()
@@ -505,20 +503,20 @@ final class ForkRunner(config:ForkRunner.Config) extends Actor with ActorLogging
     }
   }
 
-  private def lookupKey(client:ActorRef):Receive = {
-     client ! SbtClientProxy.LookupScopedKey(config.command,self)
+  private def lookupKey(client: ActorRef): Receive = {
+    client ! SbtClientProxy.LookupScopedKey(config.command, self)
 
     {
-      case SbtClientProxy.LookupScopedKeyResponse(command,Success(keys)) =>
+      case SbtClientProxy.LookupScopedKeyResponse(command, Success(keys)) =>
         log.debug(s"Retrirved key.  Doing initial build")
-        context.become(initialBuild(client,keys.head))
-      case SbtClientProxy.LookupScopedKeyResponse(command,Failure(error)) =>
+        context.become(initialBuild(client, keys.head))
+      case SbtClientProxy.LookupScopedKeyResponse(command, Failure(error)) =>
         log.error(s"Could not look up command[terminating]: $command - received: $error")
         exit()
     }
   }
 
-  private def exiting:Receive = {
+  private def exiting: Receive = {
     connectorProxy ! SbtConnectionProxy.Close(self)
 
     {
@@ -528,20 +526,20 @@ final class ForkRunner(config:ForkRunner.Config) extends Actor with ActorLogging
     }
   }
 
-  private def exit():Unit = context.become(exiting)
+  private def exit(): Unit = context.become(exiting)
 
-  private def waitForClient:Receive = {
+  private def waitForClient: Receive = {
     case SbtConnectionProxy.NewClientResponse.Connected(client) =>
       log.debug(s"Got client. Looking up key for ${config.command}")
       context.become(lookupKey(client))
-    case SbtConnectionProxy.NewClientResponse.Error(true,error) =>
+    case SbtConnectionProxy.NewClientResponse.Error(true, error) =>
       log.warning(s"recoverable error getting client: $error")
-    case SbtConnectionProxy.NewClientResponse.Error(false,error) =>
+    case SbtConnectionProxy.NewClientResponse.Error(false, error) =>
       log.error(s"could not get client[terminating]: $error")
       exit()
   }
 
-  def receive:Receive = {
+  def receive: Receive = {
     connectorProxy ! SbtConnectionProxy.NewClient(self)
     waitForClient
   }

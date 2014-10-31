@@ -127,7 +127,6 @@ private class SbtPlayWatchService(pollDelayMillis: Int) extends PlayWatchService
   }
 }
 
-
 private object JNotifyPlayWatchService {
 
   import java.lang.reflect.{ Method, InvocationHandler, Proxy }

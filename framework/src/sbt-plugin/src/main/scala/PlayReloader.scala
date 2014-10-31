@@ -254,7 +254,7 @@ trait PlayReloader {
         watcher.stop()
       }
 
-      def isForked():Boolean = false
+      def isForked(): Boolean = false
 
       def getClassLoader = currentApplicationClassLoader
     }
