@@ -29,7 +29,7 @@ object BuildSettings {
   val experimental = Option(System.getProperty("experimental")).exists(_ == "true")
 
   val buildOrganization = "com.typesafe.play"
-  val buildVersion = propOr("play.version", "2.3-SNAPSHOT")
+  val buildVersion = propOr("play.version", "2.3.8")
   val buildWithDoc = boolProp("generate.doc")
   val previousVersion = "2.3.0"
   // Libraries that are not Scala libraries or are SBT libraries should not be published if the binary
@@ -67,7 +67,6 @@ object BuildSettings {
     versionWithGit ++ Seq(git.baseVersion := buildVersion) ++ // Comment out if you need to directly hack version
     // Seq(version := buildVersion) ++ // useful to keep around for testing quick snapshot-based versions
     Seq(organization := buildOrganization,
-        git.baseVersion := buildVersion,
         scalaVersion := buildScalaVersion,
         homepage := Some(url("https://playframework.com")),
         licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
