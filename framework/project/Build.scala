@@ -243,7 +243,7 @@ object PlayBuild extends Build {
                                                             (if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings))
 
   lazy val RoutesCompilerProject = routesCompilerProject("Routes-Compiler",
-                                                         SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),
+                                                         SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),
                                                          publishSettings)
 
   lazy val AnormProject = PlayRuntimeProject("Anorm", "anorm")
