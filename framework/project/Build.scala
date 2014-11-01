@@ -53,7 +53,7 @@ object BuildSettings {
   class SharedProjectScalaVersion(val scalaVersion: String, val targetDir: String) {
     val nameSuffix:String = targetDir.replace(".","").trim()
     def toSettings(targetPrefix:String):Seq[Setting[_]] = Seq(
-      Keys.target <<= target / s"$targetPrefix-$targetDir",
+      target := target.value / s"$targetPrefix-$targetDir",
       Keys.scalaVersion := scalaVersion
     )
   }
