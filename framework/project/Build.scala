@@ -233,14 +233,22 @@ object PlayBuild extends Build {
       libraryDependencies ++= sbtClientDependencies
     ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
 
+  def scala211ParserCombinators(scalaBinaryVersion: String):Seq[ModuleID] = scalaBinaryVersion match {
+    case "2.11" => Seq("org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.2")
+    case "2.10" => Seq.empty[ModuleID]
+  }
+
   def routesCompilerProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
     PlaySharedRuntimeProject(s"$prefix-${sv.nameSuffix}", s"routes-compiler", prefix, sv, additionalSettings).settings(
-      libraryDependencies ++= routersCompilerDependencies
+      libraryDependencies ++= routersCompilerDependencies ++ scala211ParserCombinators(scalaBinaryVersion.value)
     )
 
   lazy val SbtRoutesCompilerProject = routesCompilerProject("SBT-Routes-Compiler",
                                                             SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),
-                                                            (if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings))
+                                                            (if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings) ++
+                                                            Seq(scalaVersion := buildScalaVersionForSbt,
+                                                                scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersionForSbt),
+                                                                scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked")))
 
   lazy val RoutesCompilerProject = routesCompilerProject("Routes-Compiler",
                                                          SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),
