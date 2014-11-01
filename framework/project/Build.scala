@@ -233,8 +233,18 @@ object PlayBuild extends Build {
       libraryDependencies ++= sbtClientDependencies
     ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
 
-  lazy val RoutesCompilerProject = PlaySbtProject("Routes-Compiler", "routes-compiler")
-    .settings(libraryDependencies ++= routersCompilerDependencies)
+  def routesCompilerProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
+    PlaySharedRuntimeProject(s"$prefix-${sv.nameSuffix}", s"routes-compiler", prefix, sv, additionalSettings).settings(
+      libraryDependencies ++= routersCompilerDependencies
+    )
+
+  lazy val SbtRoutesCompilerProject = routesCompilerProject("SBT-Routes-Compiler",
+                                                            SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),
+                                                            (if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings))
+
+  lazy val RoutesCompilerProject = routesCompilerProject("Routes-Compiler",
+                                                         SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),
+                                                         publishSettings)
 
   lazy val AnormProject = PlayRuntimeProject("Anorm", "anorm")
     .settings(
@@ -362,8 +372,11 @@ object PlayBuild extends Build {
         val () = publishLocal.value
         val () = (publishLocal in BuildLinkProject).value
         val () = (publishLocal in PlayExceptionsProject).value
-        val () = (publishLocal in RoutesCompilerProject).value
+        val () = (publishLocal in SbtRoutesCompilerProject).value
         val () = (publishLocal in SbtRunSupportProject).value
+        val () = (publishLocal in RoutesCompilerProject).value
+        val () = (publishLocal in RunSupportProject).value
+        val () = (publishLocal in SbtClientProject).value
         val () = (publishLocal in PlayTestProject).value
         val () = (publishLocal in PlayDocsProject).value
         val () = (publishLocal in PlayProject).value
@@ -372,7 +385,7 @@ object PlayBuild extends Build {
         val () = (publishLocal in FunctionalProject).value
         val () = (publishLocal in DataCommonsProject).value
       }
-    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, RoutesCompilerProject, SbtRunSupportProject)
+    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, SbtRoutesCompilerProject, SbtRunSupportProject)
 
   lazy val PlayWsProject = PlayRuntimeProject("Play-WS", "play-ws")
     .settings(
@@ -460,6 +473,7 @@ object PlayBuild extends Build {
     FunctionalProject,
     DataCommonsProject,
     JsonProject,
+    SbtRoutesCompilerProject,
     RoutesCompilerProject,
     PlayCacheProject,
     PlayJdbcProject,

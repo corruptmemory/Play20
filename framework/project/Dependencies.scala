@@ -24,7 +24,7 @@ object Dependencies {
 
   val jdbcDeps = Seq(
     "com.jolbox" % "bonecp" % "0.8.0.RELEASE",
-    h2database, 
+    h2database,
     "org.eu.acolyte" % "jdbc-driver" % "1.0.18" % "test",
     "tyrex" % "tyrex" % "1.0.1") ++ specsBuild.map(_ % "test")
 
@@ -141,7 +141,7 @@ object Dependencies {
     typesafeConfig,
     "com.typesafe.akka" %% "akka-testkit" % "2.3.4" % "test",
 
-    sbtPluginDep("com.typesafe.sbt" % "sbt-twirl" % "1.0.2")
+    "com.typesafe.play" %% "twirl-compiler" % "1.0.2"
   )
 
   val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
