@@ -72,6 +72,7 @@ object BuildSettings {
         licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
         scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersion),
         ivyLoggingLevel := UpdateLogging.DownloadOnly,
+        ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
         javacOptions ++= makeJavacOptions("1.6"),
         javacOptions in doc := Seq("-source", "1.6"),
         resolvers ++= playResolvers,
