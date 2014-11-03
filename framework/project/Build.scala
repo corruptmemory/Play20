@@ -40,7 +40,7 @@ object BuildSettings {
   // TODO - Try to compute this from SBT... or not.
   val buildScalaVersionForSbt = propOr("play.sbt.scala.version", defaultScalaVersion)
   val buildScalaBinaryVersionForSbt = CrossVersion.binaryScalaVersion(buildScalaVersionForSbt)
-  val buildSbtVersion = propOr("play.sbt.version", "0.13.5")
+  val buildSbtVersion = propOr("play.sbt.version", "0.13.6")
   val buildSbtMajorVersion = "0.13"
   val buildSbtVersionBinaryCompatible = CrossVersion.binarySbtVersion(buildSbtVersion)
   // Used by api docs generation to link back to the correct branch on GitHub, only when version is a SNAPSHOT
@@ -50,7 +50,7 @@ object BuildSettings {
 
   lazy val PerformanceTest = config("pt") extend(Test)
 
-  class SharedProjectScalaVersion(val scalaVersion: String, val targetDir: String) {
+  case class SharedProjectScalaVersion(scalaVersion: String, targetDir: String) {
     val nameSuffix:String = targetDir.replace(".","").trim()
     def toSettings(targetPrefix:String):Seq[Setting[_]] = Seq(
       target := target.value / s"$targetPrefix-$targetDir",
@@ -60,7 +60,7 @@ object BuildSettings {
 
   object SharedProjectScalaVersion {
     def forScalaVersion(scalaVersion:String):SharedProjectScalaVersion =
-      new SharedProjectScalaVersion(scalaVersion,CrossVersion.binaryScalaVersion(scalaVersion))
+      SharedProjectScalaVersion(scalaVersion,CrossVersion.binaryScalaVersion(scalaVersion))
   }
 
   val playCommonSettings =
@@ -150,15 +150,17 @@ object BuildSettings {
     Docs.apiDocsInclude := true
   )
 
+  val sbtScalaOverrides:Seq[Setting[_]] = Seq(
+    scalaVersion := buildScalaVersionForSbt,
+    scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersionForSbt),
+    scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked"))
+
   def PlaySbtProject(name: String, dir: String): Project = {
     Project(name, file("src/" + dir))
       .settings(playCommonSettings: _*)
       .settings((if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings): _*)
       .settings(defaultScalariformSettings: _*)
-      .settings(
-        scalaVersion := buildScalaVersionForSbt,
-        scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersionForSbt),
-        scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked"))
+      .settings(sbtScalaOverrides: _*)
   }
 
   /**
@@ -221,10 +223,10 @@ object PlayBuild extends Build {
 
   def runSupportProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
     PlaySharedRuntimeProject(s"$prefix-${sv.nameSuffix}", s"run-support", prefix, sv, additionalSettings).settings(
-      libraryDependencies ++= runSupportDependencies
+      libraryDependencies ++= runSupportDependencies(sv.scalaVersion)
     )
 
-  lazy val SbtRunSupportProject = runSupportProject("SBT-Run-Support",SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),(if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings))
+  lazy val SbtRunSupportProject = runSupportProject("SBT-Run-Support",SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),(if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings) ++ sbtScalaOverrides)
 
   lazy val RunSupportProject = runSupportProject("Run-Support", SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),publishSettings)
 
@@ -245,10 +247,7 @@ object PlayBuild extends Build {
 
   lazy val SbtRoutesCompilerProject = routesCompilerProject("SBT-Routes-Compiler",
                                                             SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),
-                                                            (if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings) ++
-                                                            Seq(scalaVersion := buildScalaVersionForSbt,
-                                                                scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersionForSbt),
-                                                                scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked")))
+                                                            (if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings) ++ sbtScalaOverrides)
 
   lazy val RoutesCompilerProject = routesCompilerProject("Routes-Compiler",
                                                          SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),
@@ -393,7 +392,7 @@ object PlayBuild extends Build {
         val () = (publishLocal in FunctionalProject).value
         val () = (publishLocal in DataCommonsProject).value
       }
-    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, SbtRoutesCompilerProject, SbtRunSupportProject)
+    ).dependsOn(BuildLinkProject, PlayExceptionsProject, SbtRoutesCompilerProject, SbtRunSupportProject)
 
   lazy val PlayWsProject = PlayRuntimeProject("Play-WS", "play-ws")
     .settings(

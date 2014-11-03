@@ -130,9 +130,21 @@ object Dependencies {
     )
   }
 
-  val runSupportDependencies = Seq(
-    "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion,
-    "com.typesafe.sbtrc" % "client-2-10" % sbtRcVersion
+  def sbtClient(scalaVersion:String):ModuleID =
+    CrossVersion.binaryScalaVersion(scalaVersion) match {
+      case "2.10" => "com.typesafe.sbtrc" % "client-2-10" % sbtRcVersion
+      case "2.11" => "com.typesafe.sbtrc" % "client-2-11" % sbtRcVersion
+    }
+
+  def sbtIO(scalaVersion:String):ModuleID =
+    CrossVersion.binaryScalaVersion(scalaVersion) match {
+      case "2.10" => "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion
+      case "2.11" => "org.scala-sbt" % "io_2.11" % BuildSettings.buildSbtVersion
+    }
+
+  def runSupportDependencies(scalaVersion:String):Seq[ModuleID] = Seq(
+    sbtIO(scalaVersion),
+    sbtClient(scalaVersion)
   ) ++ specsBuild.map(_ % Test)
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
