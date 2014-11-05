@@ -126,8 +126,8 @@ object BuildSettings {
     Project(name, file("src/" + dir))
       .settings(playCommonSettings: _*)
       .settings(defaultScalariformSettings: _*)
-      .settings(scalaVersion.toSettings(targetPrefix): _*)
       .settings(additionalSettings: _*)
+      .settings(scalaVersion.toSettings(targetPrefix): _*)
   }
 
   /**
@@ -223,7 +223,7 @@ object PlayBuild extends Build {
     .dependsOn(PlayExceptionsProject)
 
   def runSupportProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
-    PlaySharedRuntimeProject(s"$prefix-${sv.nameSuffix}", s"run-support", prefix, sv, additionalSettings).settings(
+    PlaySharedRuntimeProject(prefix, s"run-support", prefix, sv, additionalSettings).settings(
       libraryDependencies ++= runSupportDependencies(sv.scalaVersion)
     )
 
@@ -242,7 +242,7 @@ object PlayBuild extends Build {
   }
 
   def routesCompilerProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
-    PlaySharedRuntimeProject(s"$prefix-${sv.nameSuffix}", s"routes-compiler", prefix, sv, additionalSettings).settings(
+    PlaySharedRuntimeProject(prefix, s"routes-compiler", prefix, sv, additionalSettings).settings(
       libraryDependencies ++= routersCompilerDependencies ++ scala211ParserCombinators(scalaBinaryVersion.value)
     )
 
