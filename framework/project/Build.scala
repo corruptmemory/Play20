@@ -233,7 +233,7 @@ object PlayBuild extends Build {
 
   lazy val SbtClientProject = PlayRuntimeProject("SBT-Client", "sbt-client")
     .settings(
-      libraryDependencies ++= sbtClientDependencies
+      libraryDependencies ++= sbtClientDependencies(scalaVersion.value)
     ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
 
   def scala211ParserCombinators(scalaBinaryVersion: String):Seq[ModuleID] = scalaBinaryVersion match {

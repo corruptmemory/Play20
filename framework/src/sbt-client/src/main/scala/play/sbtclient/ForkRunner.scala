@@ -24,6 +24,7 @@ import scala.util.{ Try, Success, Failure }
 import akka.actor._
 import com.typesafe.config.{ ConfigFactory, Config }
 import akka.event.LoggingAdapter
+import sbt.client.actors.{ SbtClientProxy, SbtConnectionProxy}
 
 object SbtSerializers {
   import play.api.libs.json._

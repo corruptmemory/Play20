@@ -4,8 +4,7 @@
 import sbt._
 
 object Dependencies {
-
-  val sbtRcVersion = "1.0-a8e6f62a9d81d7126989f6f4b2505615aff2a8e8"
+  val sbtRcVersion = "1.0-a29d6039148143de0b845da4b1e97e123f793129"
   // Some common dependencies here so they don't need to be declared over and over
   val specsVersion = "2.3.12"
   val specsBuild = Seq(
@@ -130,6 +129,12 @@ object Dependencies {
     )
   }
 
+  def sbtActorClient(scalaVersion:String):ModuleID =
+    CrossVersion.binaryScalaVersion(scalaVersion) match {
+      case "2.10" => "com.typesafe.sbtrc" % "actor-client-2-10" % sbtRcVersion
+      case "2.11" => "com.typesafe.sbtrc" % "actor-client-2-11" % sbtRcVersion
+    }
+
   def sbtClient(scalaVersion:String):ModuleID =
     CrossVersion.binaryScalaVersion(scalaVersion) match {
       case "2.10" => "com.typesafe.sbtrc" % "client-2-10" % sbtRcVersion
@@ -149,11 +154,11 @@ object Dependencies {
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
 
-  val sbtClientDependencies = minimumRuntime ++ Seq(
+  def sbtClientDependencies(scalaVersion:String) = minimumRuntime ++ Seq(
     typesafeConfig,
     "com.typesafe.akka" %% "akka-testkit" % "2.3.4" % "test",
-
-    "com.typesafe.play" %% "twirl-compiler" % "1.0.2"
+    "com.typesafe.play" %% "twirl-compiler" % "1.0.2",
+    sbtActorClient(scalaVersion)
   )
 
   val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
