@@ -333,11 +333,7 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    val config = {
-      val r = ConfigFactory.load().getConfig("play-dev")
-      println(s"config: $r")
-      r
-    }
+    val config = ConfigFactory.load().getConfig("play-dev")
   }
 
   def main(args: Array[String]): Unit = {

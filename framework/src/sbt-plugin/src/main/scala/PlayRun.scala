@@ -123,8 +123,7 @@ trait PlayRun extends PlayInternalKeys {
   val playDefaultRunTask = playRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
     playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
 
-  val backgroundPlayDefaultRunTask = backgroundPlayRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
-    playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
+  val backgroundPlayDefaultRunTask = backgroundPlayRunTask(playDependencyClasspath, playReloaderClasspath)
 
   def playRunForked(logger: Logger,
     baseDirectory: File,
@@ -161,10 +160,7 @@ trait PlayRun extends PlayInternalKeys {
     runner.run("play.sbtclient.ForkRunner", dependencyClasspath.map(_.data), Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
   }
 
-  def backgroundPlayRunTask(runHooks: TaskKey[Seq[play.PlayRunHook]],
-    dependencyClasspath: TaskKey[Classpath], dependencyClassLoader: TaskKey[ClassLoaderCreator],
-    reloaderClasspath: TaskKey[Classpath], reloaderClassLoader: TaskKey[ClassLoaderCreator],
-    assetsClassLoader: TaskKey[ClassLoader => ClassLoader]):Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
+  def backgroundPlayRunTask(_dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]):Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
       val args = Def.spaceDelimited().parsed
       val state = Keys.state.value
       val extracted = Project.extract(state)
@@ -172,7 +168,7 @@ trait PlayRun extends PlayInternalKeys {
       val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
       val projectRef: ProjectRef = extracted.currentRef
       val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
-      val dependencyClasspath: Classpath = (Keys.dependencyClasspath in Compile).value
+      val dependencyClasspath: Classpath = _dependencyClasspath.value ++ reloaderClasspath.value
       val monitoredFiles: Seq[String] = playMonitoredFiles.value
       val targetDirectory: File = target.value
       val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
@@ -222,7 +218,7 @@ trait PlayRun extends PlayInternalKeys {
         (Keys.baseDirectory in ThisProject).value,
         extracted.currentRef,
         (javaOptions in Runtime).value,
-        dependencyClasspath.value,
+        dependencyClasspath.value ++ reloaderClasspath.value,
         playMonitoredFiles.value,
         target.value,
         (managedClasspath in DocsApplication).value,
