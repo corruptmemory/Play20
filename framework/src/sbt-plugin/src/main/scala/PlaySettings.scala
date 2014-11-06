@@ -134,6 +134,9 @@ trait PlaySettings {
     // THE `in Compile` IS IMPORTANT!
     run in Compile <<= playDefaultRunTask,
 
+    UIKeys.backgroundRunMain in Compile <<= backgroundPlayDefaultRunTask,
+    UIKeys.backgroundRun in Compile <<= backgroundPlayDefaultRunTask,
+
     playStop := {
       playInteractionMode.value match {
         case nonBlocking: PlayNonBlockingInteractionMode =>

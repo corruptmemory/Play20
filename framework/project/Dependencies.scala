@@ -161,13 +161,13 @@ object Dependencies {
     sbtActorClient(scalaVersion)
   )
 
-  val sbtBackgroundRun = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
+  val sbtServer = "com.typesafe.sbtrc" % "server-0-13" % sbtRcVersion
+  val sbtRcDeps = Seq(sbtServer)
 
   val sbtDependencies = Seq(
     "org.scala-lang" % "scala-reflect" % BuildSettings.buildScalaVersionForSbt % "provided",
     "com.typesafe" % "config" % "1.2.1",
     "org.mozilla" % "rhino" % "1.7R4",
-    sbtBackgroundRun,
 
     ("com.google.javascript" % "closure-compiler" % "v20130603")
       .exclude("args4j", "args4j")
@@ -191,7 +191,7 @@ object Dependencies {
 
     sbtPluginDep("com.typesafe.sbt" % "sbt-js-engine" % "1.0.1"),
     sbtPluginDep("com.typesafe.sbt" % "sbt-webdriver" % "1.0.0")
-  ) ++ specsSbt.map(_ % "test")
+  ) ++ sbtRcDeps ++ specsSbt.map(_ % "test")
 
   val playDocsDependencies = Seq(
     "com.typesafe.play" %% "play-doc" % "1.1.0",

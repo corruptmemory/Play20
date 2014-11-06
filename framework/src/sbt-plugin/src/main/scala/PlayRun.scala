@@ -123,6 +123,9 @@ trait PlayRun extends PlayInternalKeys {
   val playDefaultRunTask = playRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
     playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
 
+  val backgroundPlayDefaultRunTask = backgroundPlayRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
+    playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
+
   def playRunForked(logger: Logger,
     baseDirectory: File,
     projectDirectory: File,
@@ -157,6 +160,41 @@ trait PlayRun extends PlayInternalKeys {
 
     runner.run("play.sbtclient.ForkRunner", dependencyClasspath.map(_.data), Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
   }
+
+  def backgroundPlayRunTask(runHooks: TaskKey[Seq[play.PlayRunHook]],
+    dependencyClasspath: TaskKey[Classpath], dependencyClassLoader: TaskKey[ClassLoaderCreator],
+    reloaderClasspath: TaskKey[Classpath], reloaderClassLoader: TaskKey[ClassLoaderCreator],
+    assetsClassLoader: TaskKey[ClassLoader => ClassLoader]):Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
+      val args = Def.spaceDelimited().parsed
+      val state = Keys.state.value
+      val extracted = Project.extract(state)
+      val baseDirectory: File = (Keys.baseDirectory in ThisBuild).value
+      val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
+      val projectRef: ProjectRef = extracted.currentRef
+      val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
+      val dependencyClasspath: Classpath = (Keys.dependencyClasspath in Compile).value
+      val monitoredFiles: Seq[String] = playMonitoredFiles.value
+      val targetDirectory: File = target.value
+      val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
+      val defaultHttpPort: Int = playDefaultPort.value
+      val pollDelayMillis: Int = pollInterval.value
+
+      UIKeys.jobService.value.runInBackgroundThread(Keys.resolvedScoped.value, { (logger, uiContext) =>
+        uiContext.sendEvent("Starting Play dev-mode forked and in the background")
+        playRunForked(logger,
+                      baseDirectory,
+                      projectDirectory,
+                      projectRef,
+                      javaOptions,
+                      dependencyClasspath,
+                      monitoredFiles,
+                      targetDirectory,
+                      docsClasspath,
+                      defaultHttpPort,
+                      pollDelayMillis,
+                      args)
+      })
+    }
 
   /**
    * This method is public API, used by sbt-echo, which is used by Activator:
