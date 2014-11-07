@@ -24,7 +24,7 @@ object Play
   with PlayPositionMapper
   with PlaySourceGenerators {
 
-  override def requires = SbtTwirl && SbtJsTask && SbtWebDriver
+  override def requires = SbtTwirl && SbtJsTask && SbtWebDriver && SbtBackgroundRunPlugin
 
   val autoImport = play.PlayImport
 
