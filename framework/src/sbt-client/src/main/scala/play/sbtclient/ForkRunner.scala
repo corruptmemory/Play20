@@ -410,7 +410,7 @@ object ForkRunner {
 }
 
 final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLogging {
-  import ForkRunner._, Serializers._
+  import ForkRunner._, Serializers._, PlayExceptions._
 
   val connectorProxy = context.actorOf(SbtConnectionProxy.props(config.connector))
 
@@ -432,10 +432,12 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
 
     {
       case SbtClientProxy.WatchEvent(command, result) =>
-        result.resultWithCustomThrowable[PlayForkSupportResult, CompileFailedException] match {
+        result.resultWithCustomThrowables[PlayForkSupportResult](Serializers.throwableDeserializers) match {
           case Success(x) =>
             expected.success(Right(x))
           case Failure(x: CompileFailedException) =>
+            expected.success(Left(x))
+          case Failure(x: RoutesCompilationException) =>
             expected.success(Left(x))
           case Failure(x) =>
             log.error(s"Unknown failure: ${x.getClass.getName} - $x")

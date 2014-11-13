@@ -25,6 +25,20 @@ object Serializers {
   implicit def tuple2Writes[A, B](implicit aWrites: Writes[A], bWrites: Writes[B]): Writes[(A, B)] =
     Writes[(A, B)] { case (s, f) => JsArray(Seq(aWrites.writes(s), bWrites.writes(f))) }
 
+  sealed trait LocalRegisteredFormat {
+    type T
+    def manifest: Manifest[T]
+    def format: Format[T]
+  }
+  object LocalRegisteredFormat {
+    def fromFormat[U](f: Format[U])(implicit mf: Manifest[U]): LocalRegisteredFormat =
+      new LocalRegisteredFormat {
+        type T = U
+        val manifest = mf
+        val format = f
+      }
+  }
+
   private implicit val throwableReads = sbt.GenericSerializers.throwableReads
   private implicit val throwableWrites = sbt.GenericSerializers.throwableWrites
 
@@ -51,5 +65,20 @@ object Serializers {
   implicit val assetCompilationExceptionReads: Reads[AssetCompilationException] = Json.reads[AssetCompilationException]
   implicit val assetCompilationExceptionWrites: Writes[AssetCompilationException] = Json.writes[AssetCompilationException]
   implicit val assetCompilationExceptionFormat: Format[AssetCompilationException] = Format[AssetCompilationException](assetCompilationExceptionReads, assetCompilationExceptionWrites)
+
+  val throwableDeserializers = ThrowableDeserializers.empty
+                                  .add[CompileFailedException]
+                                  .add[UnexpectedException]
+                                  .add[TemplateCompilationException]
+                                  .add[RoutesCompilationException]
+                                  .add[AssetCompilationException]
+                                  .add[CompilationException]
+
+  val formats:Seq[LocalRegisteredFormat] = List(LocalRegisteredFormat.fromFormat(playForkSupportResultFormat),
+                                              LocalRegisteredFormat.fromFormat(unexpectedExceptionFormat),
+                                              LocalRegisteredFormat.fromFormat(compilationExceptionFormat),
+                                              LocalRegisteredFormat.fromFormat(templateCompilationExceptionFormat),
+                                              LocalRegisteredFormat.fromFormat(routesCompilationExceptionFormat),
+                                              LocalRegisteredFormat.fromFormat(assetCompilationExceptionFormat))
 }
 

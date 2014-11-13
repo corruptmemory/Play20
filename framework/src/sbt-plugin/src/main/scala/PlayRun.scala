@@ -23,6 +23,7 @@ import com.typesafe.sbt.web.SbtWeb.autoImport._
 import play.runsupport.{ PlayWatchService, AssetsClassLoader }
 import play.sbtplugin.run._
 import play.runsupport.protocol.PlayForkSupportResult
+import play.runsupport.PlayExceptions._
 
 /**
  * Provides mechanisms for running a Play application in SBT
@@ -243,19 +244,61 @@ trait PlayRun extends PlayInternalKeys {
 
   val playDefaultForkRunSupportTask = playForkRunSupportTask(playReload, playDependencyClasspath, playReloaderClasspath)
 
-  def findCompilationFailure(in: Throwable): Option[xsbti.CompileFailed] = in match {
-    case null => None
-    case Incomplete(_, _, _, causes, directCause) =>
-      (causes.foldLeft[Option[xsbti.CompileFailed]](None) {
-        case (None, v) => findCompilationFailure(v)
-        case (x, _) => x
-      }) orElse directCause.flatMap {
-        case x: xsbti.CompileFailed => Some(x)
-        case _ => None
-      }
-    case x: xsbti.CompileFailed => Some(x)
-    case x: Throwable => findCompilationFailure(x.getCause)
+  def findUnderlyingFailure[T <: Throwable](in: Throwable)(test:Throwable => Option[T]): Option[T] = {
+    in match {
+      case null => None
+      case Incomplete(_, _, _, causes, directCause) =>
+        (causes.foldLeft[Option[T]](None) {
+          case (None, v) => findUnderlyingFailure(v)(test)
+          case (x, _) => x
+        }) orElse directCause.flatMap(test)
+      case x => test(x) orElse (findUnderlyingFailure(x.getCause)(test))
+    }
   }
+
+  def findCompilationFailure(in: Throwable): Option[xsbti.CompileFailed] =
+    findUnderlyingFailure(in) {
+      case x: xsbti.CompileFailed => Some(x)
+      case _ => None
+    }
+
+  def findUnexpectedException(in: Throwable): Option[UnexpectedException] =
+    findUnderlyingFailure(in) {
+      case x: UnexpectedException => Some(x)
+      case _ => None
+    }
+
+  def findCompilationException(in: Throwable): Option[CompilationException] =
+    findUnderlyingFailure(in) {
+      case x: CompilationException => Some(x)
+      case _ => None
+    }
+
+  def findTemplateCompilationException(in: Throwable): Option[TemplateCompilationException] =
+    findUnderlyingFailure(in) {
+      case x: TemplateCompilationException => Some(x)
+      case _ => None
+    }
+
+  def findRoutesCompilationException(in: Throwable): Option[RoutesCompilationException] =
+    findUnderlyingFailure(in) {
+      case x: RoutesCompilationException => Some(x)
+      case _ => None
+    }
+
+  def findAssetCompilationException(in: Throwable): Option[AssetCompilationException] =
+    findUnderlyingFailure(in) {
+      case x: AssetCompilationException => Some(x)
+      case _ => None
+    }
+
+  def findInterestingException(in: Throwable): Option[Throwable] =
+    findCompilationFailure(in) orElse
+    findUnexpectedException(in) orElse
+    findCompilationException(in) orElse
+    findTemplateCompilationException(in) orElse
+    findRoutesCompilationException(in) orElse
+    findAssetCompilationException(in)
 
   /**
    * This method is public API, used by sbt-echo, which is used by Activator:
@@ -271,7 +314,6 @@ trait PlayRun extends PlayInternalKeys {
 
     log.info("+++++++++++++++++++++++++++++++++++++++++++++")
     log.info(s"playForkRunSupportTask($compile, $dependencyClasspath, $reloaderClasspath)")
-    log.info("+++++++++++++++++++++++++++++++++++++++++++++")
 
     val compileResultEither = compile.result.value.toEither
     val dependencyClasspathResultEither = dependencyClasspath.result.value.toEither
@@ -279,6 +321,14 @@ trait PlayRun extends PlayInternalKeys {
     val playAllAssetsResultEither = playAllAssets.result.value.toEither
     val playMonitoredFilesResultEither = playMonitoredFiles.result.value.toEither
     val docsResultEither = (managedClasspath in DocsApplication).result.value.toEither
+
+    log.info(s"compileResultEither: $compileResultEither")
+    log.info(s"dependencyClasspathResultEither: $dependencyClasspathResultEither")
+    log.info(s"reloaderClasspathResultEither: $reloaderClasspathResultEither")
+    log.info(s"playAllAssetsResultEither: $playAllAssetsResultEither")
+    log.info(s"playMonitoredFilesResultEither: $playMonitoredFilesResultEither")
+    log.info(s"docsResultEither: $docsResultEither")
+    log.info("+++++++++++++++++++++++++++++++++++++++++++++")
 
     (compileResultEither,
       dependencyClasspathResultEither,
@@ -295,7 +345,7 @@ trait PlayRun extends PlayInternalKeys {
             devSettings.value,
             docsValue.map(_.data))
         case (Left(i), _, _, _, _, _) =>
-          val ex = findCompilationFailure(i)
+          val ex = findInterestingException(i)
           log.info("------------------------------")
           log.info(s"Compile failed: $i => $ex")
           log.info("------------------------------")
