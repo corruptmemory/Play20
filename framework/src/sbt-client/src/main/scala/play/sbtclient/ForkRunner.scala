@@ -436,8 +436,22 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
           case Success(x) =>
             expected.success(Right(x))
           case Failure(x: CompileFailedException) =>
+            log.error(s"CompileFailedException: ${x.getClass.getName} - $x")
+            expected.success(Left(x))
+          case Failure(x: TemplateCompilationException) =>
+            log.error(s"TemplateCompilationException: ${x.getClass.getName} - $x")
+            expected.success(Left(x))
+          case Failure(x: AssetCompilationException) =>
+            log.error(s"AssetCompilationException: ${x.getClass.getName} - $x")
             expected.success(Left(x))
           case Failure(x: RoutesCompilationException) =>
+            log.error(s"RoutesCompilationException: ${x.getClass.getName} - $x")
+            expected.success(Left(x))
+          case Failure(x: CompilationException) =>
+            log.error(s"CompilationException: ${x.getClass.getName} - $x")
+            expected.success(Left(x))
+          case Failure(x: UnexpectedException) =>
+            log.error(s"UnexpectedException: ${x.getClass.getName} - $x")
             expected.success(Left(x))
           case Failure(x) =>
             log.error(s"Unknown failure: ${x.getClass.getName} - $x")

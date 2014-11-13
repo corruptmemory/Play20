@@ -67,18 +67,18 @@ object Serializers {
   implicit val assetCompilationExceptionFormat: Format[AssetCompilationException] = Format[AssetCompilationException](assetCompilationExceptionReads, assetCompilationExceptionWrites)
 
   val throwableDeserializers = ThrowableDeserializers.empty
-    .add[CompileFailedException]
-    .add[UnexpectedException]
     .add[TemplateCompilationException]
     .add[RoutesCompilationException]
     .add[AssetCompilationException]
+    .add[CompileFailedException]
     .add[CompilationException]
+    .add[UnexpectedException]
 
   val formats: Seq[LocalRegisteredFormat] = List(LocalRegisteredFormat.fromFormat(playForkSupportResultFormat),
-    LocalRegisteredFormat.fromFormat(unexpectedExceptionFormat),
     LocalRegisteredFormat.fromFormat(compilationExceptionFormat),
     LocalRegisteredFormat.fromFormat(templateCompilationExceptionFormat),
     LocalRegisteredFormat.fromFormat(routesCompilationExceptionFormat),
-    LocalRegisteredFormat.fromFormat(assetCompilationExceptionFormat))
+    LocalRegisteredFormat.fromFormat(assetCompilationExceptionFormat),
+    LocalRegisteredFormat.fromFormat(unexpectedExceptionFormat))
 }
 
