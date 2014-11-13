@@ -16,6 +16,7 @@ import com.typesafe.sbt.web.SbtWeb.autoImport._
 import WebKeys._
 import scala.language.postfixOps
 import play.twirl.sbt.Import.TwirlKeys
+import play.runsupport.protocol.SbtSerializers
 
 trait PlaySettings {
   this: PlayCommands with PlayPositionMapper with PlayRun with PlaySourceGenerators =>
