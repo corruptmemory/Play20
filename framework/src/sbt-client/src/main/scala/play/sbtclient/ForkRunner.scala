@@ -3,14 +3,14 @@
  */
 package play.sbtclient
 
-import play.runsupport.PlayExceptions
+import play.runsupport.{ PlayExceptions, Serializers }
 import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
 import java.util.jar.JarFile
 import sbt.client.{ SbtClient, SbtConnector, TaskKey }
 import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
 import scala.concurrent.ExecutionContext.Implicits.global
-import play.runsupport.protocol.{ PlayForkSupportResult, SbtSerializers }
+import play.runsupport.protocol.PlayForkSupportResult
 import play.core.{ BuildLink, BuildDocHandler }
 import play.core.classloader.{ DelegatingClassLoader, ApplicationClassLoaderProvider }
 import scala.concurrent.{ Promise, Future }
@@ -29,7 +29,7 @@ import sbt.client.actors.{ SbtClientProxy, SbtConnectionProxy }
 
 object ForkRunner {
   import scala.language.implicitConversions
-  import SbtSerializers._
+  import Serializers._
 
   type URL = java.net.URL
   type Classpath = Seq[File]
@@ -410,7 +410,7 @@ object ForkRunner {
 }
 
 final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLogging {
-  import ForkRunner._, SbtSerializers._
+  import ForkRunner._, Serializers._
 
   val connectorProxy = context.actorOf(SbtConnectionProxy.props(config.connector))
 

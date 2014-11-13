@@ -22,7 +22,7 @@ import com.typesafe.sbt.packager.Keys._
 import com.typesafe.sbt.web.SbtWeb.autoImport._
 import play.runsupport.{ PlayWatchService, AssetsClassLoader }
 import play.sbtplugin.run._
-import play.runsupport.protocol.{ PlayForkSupportResult, SbtSerializers }
+import play.runsupport.protocol.PlayForkSupportResult
 
 /**
  * Provides mechanisms for running a Play application in SBT

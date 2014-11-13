@@ -16,7 +16,7 @@ import com.typesafe.sbt.web.SbtWeb.autoImport._
 import WebKeys._
 import scala.language.postfixOps
 import play.twirl.sbt.Import.TwirlKeys
-import play.runsupport.protocol.SbtSerializers
+import play.runsupport.Serializers
 
 trait PlaySettings {
   this: PlayCommands with PlayPositionMapper with PlayRun with PlaySourceGenerators =>
@@ -180,7 +180,7 @@ trait PlaySettings {
     playDefaultForkRunSupport <<= playDefaultForkRunSupportTask,
 
     UIKeys.registeredFormats in ThisProject <<= (UIKeys.registeredFormats in Global) ?? Nil,
-    (UIKeys.registeredFormats in ThisProject) += RegisteredFormat(SbtSerializers.playForkSupportResultFormat),
+    (UIKeys.registeredFormats in ThisProject) += RegisteredFormat(Serializers.playForkSupportResultFormat),
 
     sourcePositionMappers += playPositionMapper,
 
