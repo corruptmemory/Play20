@@ -11,7 +11,7 @@ import sbt._
 import sbt.Keys._
 import play.PlayImport._
 import PlayKeys._
-import PlayExceptions._
+import play.runsupport.PlayExceptions._
 
 trait PlayReloader {
   this: PlayCommands with PlayPositionMapper =>

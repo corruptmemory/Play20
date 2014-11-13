@@ -1,30 +1,20 @@
 /*
  * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
  */
-package play.sbtclient
+package play.runsupport
 
-import sbt.IO
+import sbt._
 import play.api._
 import java.io.File
 
-/**
- * A marker trait for a top-level exception handler to know that this exception
- * doesn't make sense to display.
- */
-trait UnprintableException extends Throwable
-
-/**
- * A marker trait that refines UnprintableException to indicate to a top-level exception handler
- * that the code throwing this exception has already provided feedback to the user about the error condition.
- */
-trait FeedbackProvidedException extends UnprintableException
-
-trait PlayExceptions {
-  import scala.language.implicitConversions
-
-  private implicit def convertToOption[T](o: xsbti.Maybe[T]): Option[T] =
+private object PlayExceptionsHelper {
+  implicit def convertToOption[T](o: xsbti.Maybe[T]): Option[T] =
     if (o.isDefined()) Some(o.get())
     else None
+}
+
+trait PlayExceptions {
+  import PlayExceptionsHelper._
 
   def filterAnnoyingErrorMessages(message: String): String = {
     val overloaded = """(?s)overloaded method value (.*) with alternatives:(.*)cannot be applied to(.*)""".r

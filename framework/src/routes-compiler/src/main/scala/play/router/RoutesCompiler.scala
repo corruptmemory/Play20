@@ -70,7 +70,7 @@ object RoutesCompiler {
     override val whiteSpace = """[ \t]+""".r
 
     override def phrase[T](p: Parser[T]) = new Parser[T] {
-      var prevNoSuccess:NoSuccess = null
+      var prevNoSuccess: NoSuccess = null
       def apply(in: Input) = p(in) match {
         case s @ Success(out, in1) =>
           if (in1.atEnd)
@@ -79,7 +79,7 @@ object RoutesCompiler {
             Failure("end of input expected", in1)
           else
             prevNoSuccess
-        case x:NoSuccess =>
+        case x: NoSuccess =>
           prevNoSuccess = x
           x
       }

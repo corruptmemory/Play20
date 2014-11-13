@@ -3,6 +3,7 @@
  */
 package play.sbtclient
 
+import play.runsupport.PlayExceptions
 import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
 import java.util.jar.JarFile
@@ -24,7 +25,7 @@ import scala.util.{ Try, Success, Failure }
 import akka.actor._
 import com.typesafe.config.{ ConfigFactory, Config }
 import akka.event.LoggingAdapter
-import sbt.client.actors.{ SbtClientProxy, SbtConnectionProxy}
+import sbt.client.actors.{ SbtClientProxy, SbtConnectionProxy }
 
 object SbtSerializers {
   import play.api.libs.json._
@@ -61,9 +62,7 @@ object SbtSerializers {
   implicit def tuple2Writes[A, B](implicit aWrites: Writes[A], bWrites: Writes[B]): Writes[(A, B)] =
     Writes[(A, B)] { case (s, f) => JsArray(Seq(aWrites.writes(s), bWrites.writes(f))) }
 
-  // val playForkSupportResultWrites:Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
   implicit val playForkSupportResultReads: Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
-  // implicit val playForkSupportResultFormat:Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads,playForkSupportResultWrites)
 }
 
 object ForkRunner {
@@ -95,7 +94,11 @@ object ForkRunner {
   def delegatedResourcesClassLoaderCreator(name: String, urls: Array[URL], parent: ClassLoader): ClassLoader = {
     new java.net.URLClassLoader(urls, parent) {
       require(parent ne null)
-      override def getResources(name: String): java.util.Enumeration[java.net.URL] = getParent.getResources(name)
+      override def getResources(name: String): java.util.Enumeration[java.net.URL] = {
+        val r = getParent.getResources(name)
+        println(s"Looking for: $name, found: $r")
+        r
+      }
       override def toString = name + "{" + getURLs.map(_.toString).mkString(", ") + "}"
     }
   }
@@ -333,7 +336,12 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    val config = ConfigFactory.load().getConfig("play-dev")
+    // val config = ConfigFactory.load().getConfig("play-dev")
+    val config = ConfigFactory.parseString("""
+      |akka {
+      |  loglevel = ERROR
+      |  stdout-loglevel = ERROR
+      |}""".stripMargin)
   }
 
   def main(args: Array[String]): Unit = {
@@ -344,8 +352,9 @@ object ForkRunner {
     val httpPort: Option[Int] = Int.unapply(args(4))
     val httpsPort: Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
+    val cl = delegatedResourcesClassLoaderCreator("fake", new Array[URL](0), Thread.currentThread().getContextClassLoader())
 
-    val system = ActorSystem("play-dev-mode-runner", AkkaConfig.config)
+    val system = ActorSystem("play-dev-mode-runner", AkkaConfig.config, cl)
     val log = system.log
     log.debug(s"Forked Play dev-mode runner started")
     log.debug(s"baseDirectoryString: $baseDirectoryString")
@@ -467,7 +476,7 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
           case Failure(x: CompileFailedException) =>
             expected.success(Left(x))
           case Failure(x) =>
-            log.error(s"Unknown failure: $x")
+            log.error(s"Unknown failure: ${x.getClass.getName} - $x")
             expected.success(Left(x))
         }
         context.become(waitingForReload(client, command, server))

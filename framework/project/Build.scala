@@ -225,7 +225,7 @@ object PlayBuild extends Build {
   def runSupportProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
     PlaySharedRuntimeProject(prefix, s"run-support", prefix, sv, additionalSettings).settings(
       libraryDependencies ++= runSupportDependencies(sv.scalaVersion)
-    )
+    ) dependsOn(PlayExceptionsProject)
 
   lazy val SbtRunSupportProject = runSupportProject("SBT-Run-Support",SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),(if (publishNonCoreScalaLibraries) publishSettings else dontPublishSettings) ++ sbtScalaOverrides)
 

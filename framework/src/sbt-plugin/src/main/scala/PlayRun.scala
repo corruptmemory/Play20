@@ -151,7 +151,7 @@ trait PlayRun extends PlayInternalKeys {
     logger.debug(s"args: $args")
 
     val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
-      runJVMOptions = javaOptions)
+      runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads"))
     val runner = new ForkRun(runnerOptions)
     val baseDirectoryString = baseDirectory.getAbsolutePath()
     val buildUriString = projectRef.build.toString
@@ -160,37 +160,37 @@ trait PlayRun extends PlayInternalKeys {
     runner.run("play.sbtclient.ForkRunner", dependencyClasspath.map(_.data), Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
   }
 
-  def backgroundPlayRunTask(_dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]):Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
-      val args = Def.spaceDelimited().parsed
-      val state = Keys.state.value
-      val extracted = Project.extract(state)
-      val baseDirectory: File = (Keys.baseDirectory in ThisBuild).value
-      val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
-      val projectRef: ProjectRef = extracted.currentRef
-      val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
-      val dependencyClasspath: Classpath = _dependencyClasspath.value ++ reloaderClasspath.value
-      val monitoredFiles: Seq[String] = playMonitoredFiles.value
-      val targetDirectory: File = target.value
-      val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
-      val defaultHttpPort: Int = playDefaultPort.value
-      val pollDelayMillis: Int = pollInterval.value
+  def backgroundPlayRunTask(_dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
+    val args = Def.spaceDelimited().parsed
+    val state = Keys.state.value
+    val extracted = Project.extract(state)
+    val baseDirectory: File = (Keys.baseDirectory in ThisBuild).value
+    val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
+    val projectRef: ProjectRef = extracted.currentRef
+    val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
+    val dependencyClasspath: Classpath = _dependencyClasspath.value ++ reloaderClasspath.value
+    val monitoredFiles: Seq[String] = playMonitoredFiles.value
+    val targetDirectory: File = target.value
+    val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
+    val defaultHttpPort: Int = playDefaultPort.value
+    val pollDelayMillis: Int = pollInterval.value
 
-      UIKeys.jobService.value.runInBackgroundThread(Keys.resolvedScoped.value, { (logger, uiContext) =>
-        uiContext.sendEvent("Starting Play dev-mode forked and in the background")
-        playRunForked(logger,
-                      baseDirectory,
-                      projectDirectory,
-                      projectRef,
-                      javaOptions,
-                      dependencyClasspath,
-                      monitoredFiles,
-                      targetDirectory,
-                      docsClasspath,
-                      defaultHttpPort,
-                      pollDelayMillis,
-                      args)
-      })
-    }
+    UIKeys.jobService.value.runInBackgroundThread(Keys.resolvedScoped.value, { (logger, uiContext) =>
+      uiContext.sendEvent("Starting Play dev-mode forked and in the background")
+      playRunForked(logger,
+        baseDirectory,
+        projectDirectory,
+        projectRef,
+        javaOptions,
+        dependencyClasspath,
+        monitoredFiles,
+        targetDirectory,
+        docsClasspath,
+        defaultHttpPort,
+        pollDelayMillis,
+        args)
+    })
+  }
 
   /**
    * This method is public API, used by sbt-echo, which is used by Activator:
