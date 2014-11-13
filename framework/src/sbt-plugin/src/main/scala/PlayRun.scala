@@ -244,7 +244,7 @@ trait PlayRun extends PlayInternalKeys {
 
   val playDefaultForkRunSupportTask = playForkRunSupportTask(playReload, playDependencyClasspath, playReloaderClasspath)
 
-  def findUnderlyingFailure[T <: Throwable](in: Throwable)(test:Throwable => Option[T]): Option[T] = {
+  def findUnderlyingFailure[T <: Throwable](in: Throwable)(test: Throwable => Option[T]): Option[T] = {
     in match {
       case null => None
       case Incomplete(_, _, _, causes, directCause) =>
@@ -294,11 +294,11 @@ trait PlayRun extends PlayInternalKeys {
 
   def findInterestingException(in: Throwable): Option[Throwable] =
     findCompilationFailure(in) orElse
-    findUnexpectedException(in) orElse
-    findCompilationException(in) orElse
-    findTemplateCompilationException(in) orElse
-    findRoutesCompilationException(in) orElse
-    findAssetCompilationException(in)
+      findUnexpectedException(in) orElse
+      findCompilationException(in) orElse
+      findTemplateCompilationException(in) orElse
+      findRoutesCompilationException(in) orElse
+      findAssetCompilationException(in)
 
   /**
    * This method is public API, used by sbt-echo, which is used by Activator:
