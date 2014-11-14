@@ -120,12 +120,28 @@ object BuildSettings {
       )
   }
 
-  def PlaySharedRuntimeProject(name: String, dir: String, targetPrefix:String, scalaVersion: SharedProjectScalaVersion, additionalSettings:Seq[Setting[_]]): Project = {
+  def PlaySharedRuntimeProject(name: String, dir: String, targetPrefix:String, scalaVersion: SharedProjectScalaVersion, additionalSettings:Seq[Setting[_]], testBinaryCompatibility: Boolean = false): Project = {
+    val bcSettings: Seq[Setting[_]] = if (testBinaryCompatibility) {
+      mimaDefaultSettings ++ Seq(previousArtifact := Some(buildOrganization % StringUtilities.normalize(name) % previousVersion))
+    } else Nil
+
     Project(name, file("src/" + dir))
       .settings(playCommonSettings: _*)
       .settings(defaultScalariformSettings: _*)
       .settings(additionalSettings: _*)
+      .settings(bcSettings: _*)
       .settings(scalaVersion.toSettings(targetPrefix): _*)
+  }
+
+  /**
+   * A project that is only used during development
+   */
+  def PlayDevRuntimeProject(name: String, dir: String): Project = {
+    Project(name, file("src/" + dir))
+      .settings(playCommonSettings: _*)
+      .settings(publishSettings: _*)
+      .settings(defaultScalariformSettings: _*)
+      .settings(playRuntimeSettings(name): _*)
   }
 
   /**
@@ -229,7 +245,7 @@ object PlayBuild extends Build {
 
   lazy val RunSupportProject = runSupportProject("Run-Support", SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),publishSettings)
 
-  lazy val SbtClientProject = PlayRuntimeProject("SBT-Client", "sbt-client")
+  lazy val SbtClientProject = PlayDevRuntimeProject("SBT-Client", "sbt-client")
     .settings(
       libraryDependencies ++= sbtClientDependencies(scalaVersion.value)
     ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
