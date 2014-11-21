@@ -239,7 +239,7 @@ object PlayBuild extends Build {
   lazy val SbtClientProject = PlayDevRuntimeProject("SBT-Client", "sbt-client")
     .settings(
       libraryDependencies ++= sbtClientDependencies(scalaVersion.value)
-    ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
+    ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject, PlayProject, JsonProject, PlayDocsProject)
 
   def scala211ParserCombinators(scalaBinaryVersion: String):Seq[ModuleID] = scalaBinaryVersion match {
     case "2.11" => Seq("org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.2")
@@ -296,7 +296,7 @@ object PlayBuild extends Build {
         ProblemFilters.exclude[MissingMethodProblem]("play.core.ClosableLazy.create"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("controllers.Assets.controllers$Assets$$assetInfoFromResource")
       )
-    ).dependsOn(BuildLinkProject, SbtClientProject, PlayExceptionsProject, IterateesProject % "test->test;compile->compile", JsonProject)
+    ).dependsOn(BuildLinkProject, PlayExceptionsProject, IterateesProject % "test->test;compile->compile", JsonProject)
 
   lazy val PlayJdbcProject = PlayRuntimeProject("Play-JDBC", "play-jdbc")
     .settings(libraryDependencies ++= jdbcDeps)

@@ -3,29 +3,30 @@
  */
 package play.sbtclient
 
-import play.runsupport.{ PlayExceptions, Serializers }
+import akka.actor._
+import akka.event.LoggingAdapter
+import com.typesafe.config.{ ConfigFactory, Config }
 import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
-import java.util.jar.JarFile
-import sbt.client.{ SbtClient, SbtConnector, TaskKey }
-import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
-import scala.concurrent.ExecutionContext.Implicits.global
-import play.runsupport.protocol.PlayForkSupportResult
-import play.core.{ BuildLink, BuildDocHandler }
-import play.core.classloader.{ DelegatingClassLoader, ApplicationClassLoaderProvider }
-import scala.concurrent.{ Promise, Future }
-import play.runsupport.{ PlayWatchService, LoggerProxy, AssetsClassLoader }
-import sbt.{ IO, PathFinder, WatchState, SourceModificationWatch }
-import scala.annotation.tailrec
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.CountDownLatch
+import java.util.jar.JarFile
+import play.core.classloader.{ DelegatingClassLoader, ApplicationClassLoaderProvider }
+import play.core.server.NettyServer
+import play.core.{ BuildLink, BuildDocHandler }
+import play.runsupport.protocol.PlayForkSupportResult
+import play.runsupport.{ PlayExceptions, Serializers }
+import play.runsupport.{ PlayWatchService, LoggerProxy, AssetsClassLoader }
+import sbt.client.actors.{ SbtClientProxy, SbtConnectionProxy }
+import sbt.client.{ SbtClient, SbtConnector, TaskKey }
+import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
+import sbt.{ IO, PathFinder, WatchState, SourceModificationWatch }
+import scala.annotation.tailrec
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ Promise, Future }
 import scala.util.{ Try, Success, Failure }
-import akka.actor._
-import com.typesafe.config.{ ConfigFactory, Config }
-import akka.event.LoggingAdapter
-import sbt.client.actors.{ SbtClientProxy, SbtConnectionProxy }
 
 object ForkRunner {
   import scala.language.implicitConversions
@@ -374,20 +375,13 @@ object ForkRunner {
         val f = in.docsClasspath.filter(_.getName.startsWith("play-docs")).head
         new JarFile(f)
       }
-      val buildDocHandler = {
-        val docHandlerFactoryClass = docsLoader.loadClass("play.docs.BuildDocHandlerFactory")
-        val factoryMethod = docHandlerFactoryClass.getMethod("fromJar", classOf[JarFile], classOf[String])
-        factoryMethod.invoke(null, docsJarFile, "play/docs/content").asInstanceOf[BuildDocHandler]
-      }
+      val buildDocHandler = play.docs.BuildDocHandlerFactory.fromJar(docsJarFile, "play/docs/content")
 
-      val server = {
-        val mainClass = applicationLoader.loadClass("play.core.server.NettyServer")
+      val server:play.core.server.ServerWithStop = {
         if (httpPort.isDefined) {
-          val mainDev = mainClass.getMethod("mainDevHttpMode", classOf[BuildLink], classOf[BuildDocHandler], classOf[Int])
-          mainDev.invoke(null, reloader, buildDocHandler, httpPort.get: java.lang.Integer).asInstanceOf[play.core.server.ServerWithStop]
+          NettyServer.mainDevHttpMode(reloader, buildDocHandler, httpPort.get)
         } else {
-          val mainDev = mainClass.getMethod("mainDevOnlyHttpsMode", classOf[BuildLink], classOf[BuildDocHandler], classOf[Int])
-          mainDev.invoke(null, reloader, buildDocHandler, httpsPort.get: java.lang.Integer).asInstanceOf[play.core.server.ServerWithStop]
+          NettyServer.mainDevOnlyHttpsMode(reloader, buildDocHandler, httpsPort.get)
         }
       }
 

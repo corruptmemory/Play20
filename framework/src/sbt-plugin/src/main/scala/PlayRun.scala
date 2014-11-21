@@ -112,13 +112,13 @@ trait PlayRun extends PlayInternalKeys {
     logger.debug(s"args: $args")
 
     val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
-      runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads"))
+      runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads","-Dplay.debug.classpath=true"))
     val runner = new ForkRun(runnerOptions)
     val baseDirectoryString = baseDirectory.getAbsolutePath()
     val buildUriString = projectRef.build.toString
     val project = projectRef.project
 
-    runner.run("play.sbtclient.ForkRunner", dependencyClasspath.map(_.data), Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+    runner.run("play.sbtclient.ForkRunner", (dependencyClasspath.map(_.data) ++ docsClasspath.map(_.data)).toSet.toSeq, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
   }
 
   def backgroundPlayRunTask(_dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
@@ -129,7 +129,7 @@ trait PlayRun extends PlayInternalKeys {
     val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
     val projectRef: ProjectRef = extracted.currentRef
     val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
-    val dependencyClasspath: Classpath = _dependencyClasspath.value ++ reloaderClasspath.value
+    val dependencyClasspath: Classpath = _dependencyClasspath.value
     val monitoredFiles: Seq[String] = playMonitoredFiles.value
     val targetDirectory: File = target.value
     val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
@@ -179,7 +179,7 @@ trait PlayRun extends PlayInternalKeys {
         (Keys.baseDirectory in ThisProject).value,
         extracted.currentRef,
         (javaOptions in Runtime).value,
-        dependencyClasspath.value ++ reloaderClasspath.value,
+        dependencyClasspath.value,
         playMonitoredFiles.value,
         target.value,
         (managedClasspath in DocsApplication).value,
