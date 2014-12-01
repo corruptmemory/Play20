@@ -1,8 +1,9 @@
 package play.runsupport
 
 object protocol {
-  import sbt.{ protocol => rcprotcol }
-  final case class PlayForkSupportResult(analysis: rcprotcol.Analysis,
+  final case class SourceMapTarget(sourceFile:java.io.File, originalSource:Option[java.io.File])
+
+  final case class PlayForkSupportResult(sourceMap:Map[String,SourceMapTarget],
     dependencyClasspath: Seq[java.io.File],
     reloaderClasspath: Seq[java.io.File],
     allAssets: Seq[(String, java.io.File)],

@@ -8,9 +8,11 @@ import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
 import java.util.jar.JarFile
 import sbt.client.{ SbtClient, SbtConnector, TaskKey }
-import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
+// import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
+import sbt.protocol.{ ScopedKey, TaskSuccess, TaskFailure }
 import scala.concurrent.ExecutionContext.Implicits.global
-import play.runsupport.protocol.PlayForkSupportResult
+import play.runsupport.protocol.{ PlayForkSupportResult, SourceMapTarget }
+import play.runsupport.{ PlayExceptionNoSource, PlayExceptionWithSource }
 import play.core.{ BuildLink, BuildDocHandler }
 import play.core.classloader.{ DelegatingClassLoader, ApplicationClassLoaderProvider }
 import scala.concurrent.{ Promise, Future }
@@ -69,30 +71,6 @@ object ForkRunner {
     if (o.isDefined()) Some(o.get())
     else None
 
-  def routesPositionMapper(position: xsbti.Position): Option[xsbti.Position] = {
-    position.sourceFile collect {
-      case play.router.RoutesCompiler.MaybeGeneratedSource(generatedSource) => {
-        new xsbti.Position {
-          lazy val line = {
-            position.line.flatMap(l => generatedSource.mapLine(l.asInstanceOf[Int])).map(l => xsbti.Maybe.just(l.asInstanceOf[java.lang.Integer])).getOrElse(xsbti.Maybe.nothing[java.lang.Integer])
-          }
-          lazy val lineContent = {
-            line flatMap { lineNo =>
-              sourceFile.flatMap { file =>
-                IO.read(file).split('\n').lift(lineNo - 1)
-              }
-            } getOrElse ""
-          }
-          val offset = xsbti.Maybe.nothing[java.lang.Integer]
-          val pointer = xsbti.Maybe.nothing[java.lang.Integer]
-          val pointerSpace = xsbti.Maybe.nothing[String]
-          val sourceFile = xsbti.Maybe.just(generatedSource.source.get)
-          val sourcePath = xsbti.Maybe.just(sourceFile.get.getCanonicalPath)
-        }
-      }
-    }
-  }
-
   // commonClassLoader: ClassLoader
   private[this] var commonClassLoader: ClassLoader = _
 
@@ -128,8 +106,8 @@ object ForkRunner {
       @volatile private var forceReloadNextTime = false
       // Whether any source files have changed since the last request.
       @volatile private var changed = false
-      // The last successful compile results. Used for rendering nice errors.
-      @volatile private var currentAnalysis = Option.empty[Analysis]
+      // The last succesful source map
+      @volatile private var sourceMap = Option.empty[Map[String,SourceMapTarget]]
       // A watch state for the classpath. Used to determine whether anything on the classpath has changed as a result
       // of compilation, and therefore a new classloader is needed and the app needs to be reloaded.
       @volatile private var watchState: WatchState = WatchState.empty
@@ -153,8 +131,7 @@ object ForkRunner {
        * - null - If nothing changed.
        */
       def reload: AnyRef = {
-        if (changed || forceReloadNextTime || currentAnalysis.isEmpty
-          || currentApplicationClassLoader.isEmpty) {
+        if (changed || forceReloadNextTime || sourceMap.isEmpty || currentApplicationClassLoader.isEmpty) {
 
           val shouldReload = forceReloadNextTime
 
@@ -166,7 +143,7 @@ object ForkRunner {
             .left.map(taskFailureHandler)
             .right.map { compilationResult =>
 
-              currentAnalysis = Some(compilationResult.analysis)
+              sourceMap = Some(compilationResult.sourceMap)
 
               // We only want to reload if the classpath has changed.  Assets don't live on the classpath, so
               // they won't trigger a reload.
@@ -205,50 +182,17 @@ object ForkRunner {
 
       def findSource(className: String, line: java.lang.Integer): Array[java.lang.Object] = {
         val topType = className.split('$').head
-        currentAnalysis.flatMap { analysis =>
-          analysis.apis.internal.flatMap {
-            case (sourceFile, source) =>
-              source.api.definitions.find(defined => defined.name == topType).map(_ => {
-                sourceFile: java.io.File
-              } -> line)
-          }.headOption.map {
-            case (source, maybeLine) =>
-              play.twirl.compiler.MaybeGeneratedSource.unapply(source).map { generatedSource =>
-                generatedSource.source.get -> Option(maybeLine).map(l => generatedSource.mapLine(l): java.lang.Integer).orNull
-              }.getOrElse(source -> maybeLine)
-          }
-        }.map {
-          case (file, l) =>
-            Array[java.lang.Object](file, l)
-        }.orNull
-      }
-
-      def remapProblemForGeneratedSources(problem: xsbti.Problem) = {
-        val mappedPosition = ForkRunner.routesPositionMapper(problem.position)
-        mappedPosition.map { pos =>
-          new xsbti.Problem {
-            def message = problem.message
-            def category = ""
-            def position = pos
-            def severity = problem.severity
-          }
-        } getOrElse problem
-      }
-
-      def getProblems(exception: CompileFailedException): Seq[xsbti.Problem] = {
-        exception.problems.map(remapProblemForGeneratedSources)
+        sourceMap.flatMap { _.get(topType).map { st =>
+          Array[java.lang.Object](st.originalSource.getOrElse(st.sourceFile), line)
+        }}.orNull
       }
 
       private def taskFailureHandler(in: Throwable): Exception = {
         // We force reload next time because compilation failed this time
         forceReloadNextTime = true
         in match {
-          case e: play.api.PlayException => e
-          case e: CompileFailedException =>
-            getProblems(e)
-              .find(_.severity == xsbti.Severity.Error)
-              .map(CompilationException)
-              .getOrElse(UnexpectedException(Some("The compilation failed without reporting any problem!"), Some(e)))
+          case e: PlayExceptionNoSource[_] => e
+          case e: PlayExceptionWithSource[_] => e
           case e: Exception => UnexpectedException(unexpected = Some(e))
         }
       }
@@ -260,7 +204,7 @@ object ForkRunner {
 
       def close() = {
         currentApplicationClassLoader = None
-        currentAnalysis = None
+        sourceMap = None
         watcher.stop()
       }
 
@@ -298,12 +242,12 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    // val config = ConfigFactory.load().getConfig("play-dev")
-    val config = ConfigFactory.parseString("""
-      |akka {
-      |  loglevel = ERROR
-      |  stdout-loglevel = ERROR
-      |}""".stripMargin)
+    val config = ConfigFactory.load().getConfig("play-dev")
+    // val config = ConfigFactory.parseString("""
+    //   |akka {
+    //   |  loglevel = ERROR
+    //   |  stdout-loglevel = ERROR
+    //   |}""".stripMargin)
   }
 
   def main(args: Array[String]): Unit = {
@@ -435,23 +379,11 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
         result.resultWithCustomThrowables[PlayForkSupportResult](Serializers.throwableDeserializers) match {
           case Success(x) =>
             expected.success(Right(x))
-          case Failure(x: CompileFailedException) =>
-            log.error(s"CompileFailedException: ${x.getClass.getName} - $x")
+          case Failure(x: PlayExceptionNoSource[_]) =>
+            log.error(s"PlayExceptionNoSource: ${x.getClass.getName} - $x")
             expected.success(Left(x))
-          case Failure(x: TemplateCompilationException) =>
-            log.error(s"TemplateCompilationException: ${x.getClass.getName} - $x")
-            expected.success(Left(x))
-          case Failure(x: AssetCompilationException) =>
-            log.error(s"AssetCompilationException: ${x.getClass.getName} - $x")
-            expected.success(Left(x))
-          case Failure(x: RoutesCompilationException) =>
-            log.error(s"RoutesCompilationException: ${x.getClass.getName} - $x")
-            expected.success(Left(x))
-          case Failure(x: CompilationException) =>
-            log.error(s"CompilationException: ${x.getClass.getName} - $x")
-            expected.success(Left(x))
-          case Failure(x: UnexpectedException) =>
-            log.error(s"UnexpectedException: ${x.getClass.getName} - $x")
+          case Failure(x: PlayExceptionWithSource[_]) =>
+            log.error(s"PlayExceptionWithSource: ${x.getClass.getName} - $x")
             expected.success(Left(x))
           case Failure(x) =>
             log.error(s"Unknown failure: ${x.getClass.getName} - $x")

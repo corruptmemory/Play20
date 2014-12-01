@@ -154,10 +154,8 @@ object Dependencies {
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
 
-  def sbtClientDependencies(scalaVersion:String) = minimumRuntime ++ Seq(
-    typesafeConfig,
-    "com.typesafe.akka" %% "akka-testkit" % "2.3.4" % "test",
-    "com.typesafe.play" %% "twirl-compiler" % "1.0.2",
+  def sbtClientDependencies(scalaVersion:String) = Seq(
+    typesafeConfig % "provided",
     sbtActorClient(scalaVersion)
   )
 

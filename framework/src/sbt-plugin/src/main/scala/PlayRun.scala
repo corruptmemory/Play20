@@ -22,7 +22,7 @@ import com.typesafe.sbt.packager.Keys._
 import com.typesafe.sbt.web.SbtWeb.autoImport._
 import play.runsupport.{ PlayWatchService, AssetsClassLoader }
 import play.sbtplugin.run._
-import play.runsupport.protocol.PlayForkSupportResult
+import play.runsupport.protocol.{ PlayForkSupportResult, SourceMapTarget }
 import play.runsupport.PlayExceptions._
 
 /**
@@ -300,6 +300,11 @@ trait PlayRun extends PlayInternalKeys {
       findRoutesCompilationException(in) orElse
       findAssetCompilationException(in)
 
+  def extractSourceMap(in:sbt.inc.Analysis):Map[String,SourceMapTarget] = {
+    in.apis.internal.foldLeft(Map.empty[String,SourceMapTarget]) {
+      case (s,(sourceFile, source)) => s ++ (source.api.definitions.map(d => (d.name -> SourceMapTarget(sourceFile, play.twirl.compiler.MaybeGeneratedSource.unapply(sourceFile).map(_.file)))))
+    }
+  }
   /**
    * This method is public API, used by sbt-echo, which is used by Activator:
    *
@@ -337,7 +342,7 @@ trait PlayRun extends PlayInternalKeys {
       playMonitoredFilesResultEither,
       docsResultEither) match {
         case (Right(compileValue), Right(dependencyClasspathValue), Right(reloaderClasspathValue), Right(playAllAssetsValue), Right(playMonitoredFilesValue), Right(docsValue)) =>
-          PlayForkSupportResult(sbt.server.SbtToProtocolUtils.analysisToProtocol(compileValue),
+          PlayForkSupportResult(extractSourceMap(compileValue),
             dependencyClasspathValue.map(_.data),
             reloaderClasspathValue.map(_.data),
             playAllAssetsValue,
