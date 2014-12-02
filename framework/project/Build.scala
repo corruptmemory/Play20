@@ -58,7 +58,6 @@ object BuildSettings {
         licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
         scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersion),
         ivyLoggingLevel := UpdateLogging.DownloadOnly,
-        ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
         javacOptions ++= makeJavacOptions("1.6"),
         javacOptions in doc := Seq("-source", "1.6"),
         resolvers ++= playResolvers,
@@ -236,7 +235,7 @@ object PlayBuild extends Build {
 
   lazy val RunSupportProject = runSupportProject("Run-Support", publishSettings)
 
-  lazy val SbtClientProject = PlayDevRuntimeProject("SBT-Client", "sbt-client")
+  lazy val ForkRunnerProject = PlayDevRuntimeProject("Fork-Runner", "fork-runner")
     .settings(
       libraryDependencies ++= sbtClientDependencies(scalaVersion.value)
     ).dependsOn(BuildLinkProject, RunSupportProject, RoutesCompilerProject, PlayExceptionsProject)
@@ -384,7 +383,7 @@ object PlayBuild extends Build {
         val () = (publishLocal in RunSupportProject).value
         val () = (publishLocal in RoutesCompilerProject).value
         val () = (publishLocal in RunSupportProject).value
-        val () = (publishLocal in SbtClientProject).value
+        val () = (publishLocal in ForkRunnerProject).value
         val () = (publishLocal in PlayTestProject).value
         val () = (publishLocal in PlayDocsProject).value
         val () = (publishLocal in PlayProject).value
@@ -491,7 +490,7 @@ object PlayBuild extends Build {
     PlayWsProject,
     PlayWsJavaProject,
     RunSupportProject,
-    SbtClientProject,
+    ForkRunnerProject,
     SbtPluginProject,
     PlayTestProject,
     PlayExceptionsProject,

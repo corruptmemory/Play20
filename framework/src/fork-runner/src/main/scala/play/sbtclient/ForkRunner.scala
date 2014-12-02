@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
  */
-package play.sbtclient
+package play.forkrunner
 
 import play.runsupport.{ PlayExceptions, Serializers }
 import java.io.{ File, Closeable }
@@ -286,7 +286,7 @@ object ForkRunner {
     log.debug("Exited.")
   }
 
-  private[sbtclient] trait PlayDevServer extends Closeable {
+  private[forkrunner] trait PlayDevServer extends Closeable {
     val buildLink: BuildLink
   }
 

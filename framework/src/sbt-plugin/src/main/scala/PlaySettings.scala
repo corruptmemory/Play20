@@ -90,7 +90,7 @@ trait PlaySettings {
     ivyConfigurations += DocsApplication,
     ivyConfigurations += ForkRunner,
     libraryDependencies += "com.typesafe.play" %% "play-docs" % play.core.PlayVersion.current % DocsApplication.name,
-    libraryDependencies += "com.typesafe.play" %% "sbt-client" % play.core.PlayVersion.current % ForkRunner.name,
+    libraryDependencies += "com.typesafe.play" %% "fork-runner" % play.core.PlayVersion.current % ForkRunner.name,
     manageClasspath(DocsApplication),
     manageClasspath(ForkRunner),
 

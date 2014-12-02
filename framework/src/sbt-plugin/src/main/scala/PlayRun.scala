@@ -127,7 +127,7 @@ trait PlayRun extends PlayInternalKeys {
         val buildUriString = projectRef.build.toString
         val project = projectRef.project
 
-        runner.run("play.sbtclient.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+        runner.run("play.forkrunner.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
       }
     }
 
