@@ -257,10 +257,9 @@ object ForkRunner {
     val httpPort: Option[Int] = Int.unapply(args(4))
     val httpsPort: Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
-    val cl = delegatedResourcesClassLoaderCreator("fake", new Array[URL](0), Thread.currentThread().getContextClassLoader())
     val akkaConfig = AkkaConfig.config(new File(baseDirectoryString))
 
-    val system = ActorSystem("play-dev-mode-runner", akkaConfig, cl)
+    val system = ActorSystem("play-dev-mode-runner", akkaConfig)
     val log = system.log
     log.debug(s"Forked Play dev-mode runner started")
     log.debug(s"baseDirectoryString: $baseDirectoryString")
