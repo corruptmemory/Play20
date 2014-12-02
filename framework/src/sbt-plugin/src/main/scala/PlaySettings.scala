@@ -139,8 +139,9 @@ trait PlaySettings {
     // THE `in Compile` IS IMPORTANT!
     run in Compile <<= playDefaultRunTask,
 
-    UIKeys.backgroundRunMain in ThisProject <<= backgroundPlayDefaultRunTask,
-    UIKeys.backgroundRun in ThisProject <<= backgroundPlayDefaultRunTask,
+    UIKeys.backgroundRunMain in ThisProject := playBackgroundRunTaskBuilder.value((Keys.javaOptions in Runtime).value),
+
+    UIKeys.backgroundRun in ThisProject := playBackgroundRunTaskBuilder.value((Keys.javaOptions in Runtime).value),
 
     playStop := {
       playInteractionMode.value match {
@@ -161,6 +162,23 @@ trait PlaySettings {
     computeDependencies <<= computeDependenciesTask,
 
     playVersion := play.core.PlayVersion.current,
+
+    playBackgroundRunTaskBuilder := { javaOptions =>
+      backgroundPlayRunTask(Keys.resolvedScoped.value,
+                            UIKeys.jobService.value,
+                            (Keys.baseDirectory in ThisBuild).value,
+                            (Keys.baseDirectory in ThisProject).value,
+                            Project.extract(Keys.state.value).currentRef,
+                            javaOptions,
+                            (managedClasspath in ForkRunner).value,
+                            playDependencyClasspath.value,
+                            playMonitoredFiles.value,
+                            target.value,
+                            (managedClasspath in DocsApplication).value,
+                            playDefaultPort.value,
+                            pollInterval.value,
+                            Seq[String]())
+      },
 
     // all dependencies from outside the project (all dependency jars)
     playDependencyClasspath <<= externalDependencyClasspath in Runtime,

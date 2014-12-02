@@ -89,7 +89,47 @@ trait PlayRun extends PlayInternalKeys {
   val playDefaultRunTask = playRunTask(playRunHooks, playDependencyClasspath, playDependencyClassLoader,
     playReloaderClasspath, playReloaderClassLoader, playAssetsClassLoader)
 
-  val backgroundPlayDefaultRunTask = backgroundPlayRunTask(playDependencyClasspath, playReloaderClasspath)
+  def buildPlayRunForkedRunnable(logger: Logger,
+    baseDirectory: File,
+    projectDirectory: File,
+    projectRef: ProjectRef,
+    javaOptions: Seq[String],
+    forkRunnerClasspath: Classpath,
+    dependencyClasspath: Classpath,
+    monitoredFiles: Seq[String],
+    targetDirectory: File,
+    docsClasspath: Classpath,
+    defaultHttpPort: Int,
+    pollDelayMillis: Int,
+    args: Seq[String]):Runnable = new Runnable {
+
+      def run():Unit = {
+        logger.debug(s"baseDirectory: $baseDirectory")
+        logger.debug(s"projectDirectory: $projectDirectory")
+        logger.debug(s"projectRef: $projectRef")
+        logger.debug(s"javaOptions: $javaOptions")
+        logger.debug(s"forkRunnerClasspath: $forkRunnerClasspath")
+        logger.debug(s"dependencyClasspath: $dependencyClasspath")
+        logger.debug(s"monitoredFiles: $monitoredFiles")
+        logger.debug(s"targetDirectory: $targetDirectory")
+        logger.debug(s"docsClasspath: $docsClasspath")
+        logger.debug(s"defaultHttpPort: $defaultHttpPort")
+        logger.debug(s"pollDelayMillis: $pollDelayMillis")
+        logger.debug(s"args: $args")
+
+        val boostrapClasspath = (forkRunnerClasspath.map(_.data) ++ dependencyClasspath.map(_.data)).toSet.toSeq
+        logger.debug(s"boostrapClasspath: $boostrapClasspath")
+
+        val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
+          runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads"))
+        val runner = new ForkRun(runnerOptions)
+        val baseDirectoryString = baseDirectory.getAbsolutePath()
+        val buildUriString = projectRef.build.toString
+        val project = projectRef.project
+
+        runner.run("play.sbtclient.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+      }
+    }
 
   def playRunForked(logger: Logger,
     baseDirectory: File,
@@ -104,50 +144,38 @@ trait PlayRun extends PlayInternalKeys {
     defaultHttpPort: Int,
     pollDelayMillis: Int,
     args: Seq[String]): Unit = {
-
-    logger.debug(s"baseDirectory: $baseDirectory")
-    logger.debug(s"projectDirectory: $projectDirectory")
-    logger.debug(s"projectRef: $projectRef")
-    logger.debug(s"javaOptions: $javaOptions")
-    logger.debug(s"forkRunnerClasspath: $forkRunnerClasspath")
-    logger.debug(s"dependencyClasspath: $dependencyClasspath")
-    logger.debug(s"monitoredFiles: $monitoredFiles")
-    logger.debug(s"targetDirectory: $targetDirectory")
-    logger.debug(s"docsClasspath: $docsClasspath")
-    logger.debug(s"defaultHttpPort: $defaultHttpPort")
-    logger.debug(s"pollDelayMillis: $pollDelayMillis")
-    logger.debug(s"args: $args")
-
-    val boostrapClasspath = (forkRunnerClasspath.map(_.data) ++ dependencyClasspath.map(_.data)).toSet.toSeq
-    logger.debug(s"boostrapClasspath: $boostrapClasspath")
-
-    val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
-      runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads"))
-    val runner = new ForkRun(runnerOptions)
-    val baseDirectoryString = baseDirectory.getAbsolutePath()
-    val buildUriString = projectRef.build.toString
-    val project = projectRef.project
-
-    runner.run("play.sbtclient.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+    val runnable = buildPlayRunForkedRunnable(logger,
+    baseDirectory,
+    projectDirectory,
+    projectRef,
+    javaOptions,
+    forkRunnerClasspath,
+    dependencyClasspath,
+    monitoredFiles,
+    targetDirectory,
+    docsClasspath,
+    defaultHttpPort,
+    pollDelayMillis,
+    args)
+    runnable.run()
   }
 
-  def backgroundPlayRunTask(_dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
-    val args = Def.spaceDelimited().parsed
-    val state = Keys.state.value
-    val extracted = Project.extract(state)
-    val baseDirectory: File = (Keys.baseDirectory in ThisBuild).value
-    val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
-    val projectRef: ProjectRef = extracted.currentRef
-    val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
-    val forkRunnerClasspath: Classpath = (managedClasspath in ForkRunner).value
-    val dependencyClasspath: Classpath = _dependencyClasspath.value
-    val monitoredFiles: Seq[String] = playMonitoredFiles.value
-    val targetDirectory: File = target.value
-    val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
-    val defaultHttpPort: Int = playDefaultPort.value
-    val pollDelayMillis: Int = pollInterval.value
+  def backgroundPlayRunTask(resolvedScope: ScopedKey[_],
+    jobService: BackgroundJobService,
+    baseDirectory: File,
+    projectDirectory: File,
+    projectRef: ProjectRef,
+    javaOptions: Seq[String],
+    forkRunnerClasspath: Classpath,
+    dependencyClasspath: Classpath,
+    monitoredFiles: Seq[String],
+    targetDirectory: File,
+    docsClasspath: Classpath,
+    defaultHttpPort: Int,
+    pollDelayMillis: Int,
+    args: Seq[String]): BackgroundJobHandle = {
 
-    UIKeys.jobService.value.runInBackgroundThread(Keys.resolvedScoped.value, { (logger, uiContext) =>
+    jobService.runInBackgroundThread(resolvedScope, { (logger, uiContext) =>
       uiContext.sendEvent("Starting Play dev-mode forked and in the background")
       playRunForked(logger,
         baseDirectory,
