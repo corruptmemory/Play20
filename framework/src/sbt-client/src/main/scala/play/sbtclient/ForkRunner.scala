@@ -241,12 +241,12 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    // val config = ConfigFactory.load().getConfig("play-dev")
-    val config = ConfigFactory.parseString("""
-      |akka {
-      |  loglevel = ERROR
-      |  stdout-loglevel = ERROR
-      |}""".stripMargin)
+    def config(projectRoot:File) = ConfigFactory.parseFileAnySyntax(new File(projectRoot,"conf/application.conf")).getConfig("play-dev")
+    // val config = ConfigFactory.parseString("""
+    //   |akka {
+    //   |  loglevel = ERROR
+    //   |  stdout-loglevel = ERROR
+    //   |}""".stripMargin)
   }
 
   def main(args: Array[String]): Unit = {
@@ -258,8 +258,9 @@ object ForkRunner {
     val httpsPort: Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
     val cl = delegatedResourcesClassLoaderCreator("fake", new Array[URL](0), Thread.currentThread().getContextClassLoader())
+    val akkaConfig = AkkaConfig.config(new File(baseDirectoryString))
 
-    val system = ActorSystem("play-dev-mode-runner", AkkaConfig.config, cl)
+    val system = ActorSystem("play-dev-mode-runner", akkaConfig, cl)
     val log = system.log
     log.debug(s"Forked Play dev-mode runner started")
     log.debug(s"baseDirectoryString: $baseDirectoryString")
@@ -269,6 +270,7 @@ object ForkRunner {
     log.debug(s"httpPort: $httpPort")
     log.debug(s"httpsPort: $httpsPort")
     log.debug(s"pollDelayMillis: $pollDelayMillis")
+    log.debug(s"akkaConfig: $akkaConfig")
 
     val latch = new CountDownLatch(1)
     val projectDir = new File(baseDirectoryString)
@@ -375,7 +377,6 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
 
     {
       case SbtClientProxy.WatchEvent(`command`, result) =>
-        println(s"=========> Result: $result")
         result.resultWithCustomThrowables[PlayForkSupportResult](Serializers.throwableDeserializers) match {
           case Success(x) =>
             expected.success(Right(x))
