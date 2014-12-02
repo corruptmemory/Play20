@@ -8,7 +8,6 @@ import java.io.{ File, Closeable }
 import java.net.{ URI, URLClassLoader }
 import java.util.jar.JarFile
 import sbt.client.{ SbtClient, SbtConnector, TaskKey }
-// import sbt.protocol.{ Analysis, CompileFailedException, TaskResult, TaskSuccess, TaskFailure, ScopedKey, BuildValue, fromXsbtiPosition, CompilationFailure }
 import sbt.protocol.{ ScopedKey, TaskSuccess, TaskFailure }
 import scala.concurrent.ExecutionContext.Implicits.global
 import play.runsupport.protocol.{ PlayForkSupportResult, SourceMapTarget }
@@ -191,8 +190,8 @@ object ForkRunner {
         // We force reload next time because compilation failed this time
         forceReloadNextTime = true
         in match {
-          case e: PlayExceptionNoSource[_] => e
-          case e: PlayExceptionWithSource[_] => e
+          case e: PlayExceptionNoSource => e
+          case e: PlayExceptionWithSource => e
           case e: Exception => UnexpectedException(unexpected = Some(e))
         }
       }
@@ -242,12 +241,12 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    val config = ConfigFactory.load().getConfig("play-dev")
-    // val config = ConfigFactory.parseString("""
-    //   |akka {
-    //   |  loglevel = ERROR
-    //   |  stdout-loglevel = ERROR
-    //   |}""".stripMargin)
+    // val config = ConfigFactory.load().getConfig("play-dev")
+    val config = ConfigFactory.parseString("""
+      |akka {
+      |  loglevel = ERROR
+      |  stdout-loglevel = ERROR
+      |}""".stripMargin)
   }
 
   def main(args: Array[String]): Unit = {
@@ -375,14 +374,15 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
     client ! SbtClientProxy.RequestExecution.ByScopedKey(command, None, self)
 
     {
-      case SbtClientProxy.WatchEvent(command, result) =>
+      case SbtClientProxy.WatchEvent(`command`, result) =>
+        println(s"=========> Result: $result")
         result.resultWithCustomThrowables[PlayForkSupportResult](Serializers.throwableDeserializers) match {
           case Success(x) =>
             expected.success(Right(x))
-          case Failure(x: PlayExceptionNoSource[_]) =>
+          case Failure(x: PlayExceptionNoSource) =>
             log.error(s"PlayExceptionNoSource: ${x.getClass.getName} - $x")
             expected.success(Left(x))
-          case Failure(x: PlayExceptionWithSource[_]) =>
+          case Failure(x: PlayExceptionWithSource) =>
             log.error(s"PlayExceptionWithSource: ${x.getClass.getName} - $x")
             expected.success(Left(x))
           case Failure(x) =>

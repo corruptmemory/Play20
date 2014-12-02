@@ -20,7 +20,7 @@ import java.util.jar.JarFile
 import com.typesafe.sbt.SbtNativePackager._
 import com.typesafe.sbt.packager.Keys._
 import com.typesafe.sbt.web.SbtWeb.autoImport._
-import play.runsupport.{ PlayWatchService, AssetsClassLoader }
+import play.runsupport.{ PlayWatchService, AssetsClassLoader, PlayExceptionNoSource, PlayExceptionWithSource }
 import play.sbtplugin.run._
 import play.runsupport.protocol.{ PlayForkSupportResult, SourceMapTarget }
 import play.runsupport.PlayExceptions._
@@ -36,6 +36,11 @@ trait PlayRun extends PlayInternalKeys {
    * that application. Hidden so that it isn't exposed when the user application is published.
    */
   val DocsApplication = config("docs").hide
+
+  /**
+   * Configuration for the Play fork-runner dependencies.
+   */
+  val ForkRunner = config("fork-runner").hide
 
   // Regex to match Java System Properties of the format -Dfoo=bar
   private val SystemProperty = "-D([^=]+)=(.*)".r
@@ -91,6 +96,7 @@ trait PlayRun extends PlayInternalKeys {
     projectDirectory: File,
     projectRef: ProjectRef,
     javaOptions: Seq[String],
+    forkRunnerClasspath: Classpath,
     dependencyClasspath: Classpath,
     monitoredFiles: Seq[String],
     targetDirectory: File,
@@ -103,6 +109,7 @@ trait PlayRun extends PlayInternalKeys {
     logger.debug(s"projectDirectory: $projectDirectory")
     logger.debug(s"projectRef: $projectRef")
     logger.debug(s"javaOptions: $javaOptions")
+    logger.debug(s"forkRunnerClasspath: $forkRunnerClasspath")
     logger.debug(s"dependencyClasspath: $dependencyClasspath")
     logger.debug(s"monitoredFiles: $monitoredFiles")
     logger.debug(s"targetDirectory: $targetDirectory")
@@ -111,6 +118,9 @@ trait PlayRun extends PlayInternalKeys {
     logger.debug(s"pollDelayMillis: $pollDelayMillis")
     logger.debug(s"args: $args")
 
+    val boostrapClasspath = (forkRunnerClasspath.map(_.data) ++ dependencyClasspath.map(_.data)).toSet.toSeq
+    logger.debug(s"boostrapClasspath: $boostrapClasspath")
+
     val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
       runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads"))
     val runner = new ForkRun(runnerOptions)
@@ -118,7 +128,7 @@ trait PlayRun extends PlayInternalKeys {
     val buildUriString = projectRef.build.toString
     val project = projectRef.project
 
-    runner.run("play.sbtclient.ForkRunner", dependencyClasspath.map(_.data), Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+    runner.run("play.sbtclient.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
   }
 
   def backgroundPlayRunTask(_dependencyClasspath: TaskKey[Classpath], reloaderClasspath: TaskKey[Classpath]): Def.Initialize[InputTask[BackgroundJobHandle]] = Def.inputTask {
@@ -129,7 +139,8 @@ trait PlayRun extends PlayInternalKeys {
     val projectDirectory: File = (Keys.baseDirectory in ThisProject).value
     val projectRef: ProjectRef = extracted.currentRef
     val javaOptions: Seq[String] = (Keys.javaOptions in Runtime).value
-    val dependencyClasspath: Classpath = _dependencyClasspath.value ++ reloaderClasspath.value
+    val forkRunnerClasspath: Classpath = (managedClasspath in ForkRunner).value
+    val dependencyClasspath: Classpath = _dependencyClasspath.value
     val monitoredFiles: Seq[String] = playMonitoredFiles.value
     val targetDirectory: File = target.value
     val docsClasspath: Classpath = (managedClasspath in DocsApplication).value
@@ -143,6 +154,7 @@ trait PlayRun extends PlayInternalKeys {
         projectDirectory,
         projectRef,
         javaOptions,
+        forkRunnerClasspath,
         dependencyClasspath,
         monitoredFiles,
         targetDirectory,
@@ -179,7 +191,8 @@ trait PlayRun extends PlayInternalKeys {
         (Keys.baseDirectory in ThisProject).value,
         extracted.currentRef,
         (javaOptions in Runtime).value,
-        dependencyClasspath.value ++ reloaderClasspath.value,
+        (managedClasspath in ForkRunner).value,
+        dependencyClasspath.value,
         playMonitoredFiles.value,
         target.value,
         (managedClasspath in DocsApplication).value,
@@ -256,11 +269,11 @@ trait PlayRun extends PlayInternalKeys {
     }
   }
 
-  def findCompilationFailure(in: Throwable): Option[xsbti.CompileFailed] =
-    findUnderlyingFailure(in) {
-      case x: xsbti.CompileFailed => Some(x)
-      case _ => None
-    }
+  // def findCompilationFailure(in: Throwable): Option[xsbti.CompileFailed] =
+  //   findUnderlyingFailure(in) {
+  //     case x: xsbti.CompileFailed => Some(x)
+  //     case _ => None
+  //   }
 
   def findUnexpectedException(in: Throwable): Option[UnexpectedException] =
     findUnderlyingFailure(in) {
@@ -291,6 +304,33 @@ trait PlayRun extends PlayInternalKeys {
       case x: AssetCompilationException => Some(x)
       case _ => None
     }
+
+  private def allProblems(inc: Incomplete): Seq[xsbti.Problem] = {
+    allProblems(inc :: Nil)
+  }
+
+  private def allProblems(incs: Seq[Incomplete]): Seq[xsbti.Problem] = {
+    problems(Incomplete.allExceptions(incs).toSeq)
+  }
+
+  private def problems(es: Seq[Throwable]): Seq[xsbti.Problem] = {
+    es flatMap {
+      case cf: xsbti.CompileFailed => cf.problems
+      case _ => Nil
+    }
+  }
+
+  private def findCompilationFailure(in: Throwable): Option[CompilationException] = in match {
+    case incomplete: Incomplete =>
+      Incomplete.allExceptions(incomplete).headOption.flatMap {
+        case e: xsbti.CompileFailed =>
+          allProblems(incomplete)
+            .find(_.severity == xsbti.Severity.Error)
+            .map(CompilationException)
+        case _ => None
+      }
+    case _ => None
+  }
 
   def findInterestingException(in: Throwable): Option[Throwable] =
     findCompilationFailure(in) orElse
@@ -354,8 +394,47 @@ trait PlayRun extends PlayInternalKeys {
           log.info("------------------------------")
           log.info(s"Compile failed: $i => $ex")
           log.info("------------------------------")
-          if (ex.isDefined) throw ex.get
-          else throw i
+          ex match {
+            case Some(x:UnexpectedException) =>
+              throw PlayExceptionNoSource("UnexpectedException",x.getMessage,"ERROR",xsbti.Severity.Error,x)
+            case Some(x:CompilationException) =>
+              throw PlayExceptionWithSource(genericTitle = x.title,
+                                            message = x.getMessage,
+                                            category = x.problem.category,
+                                            severity = x.problem.severity,
+                                            wrapped = x,
+                                            row = x.line,
+                                            column = x.position,
+                                            sourceFile = x.problem.position.sourceFile.get)
+            case Some(x:TemplateCompilationException) =>
+              throw PlayExceptionWithSource(genericTitle = x.title,
+                                            message = x.getMessage,
+                                            category = "ERROR",
+                                            severity = xsbti.Severity.Error,
+                                            wrapped = x,
+                                            row = x.line,
+                                            column = x.position,
+                                            sourceFile = x.source)
+            case Some(x:RoutesCompilationException) =>
+              throw PlayExceptionWithSource(genericTitle = x.title,
+                                            message = x.getMessage,
+                                            category = "ERROR",
+                                            severity = xsbti.Severity.Error,
+                                            wrapped = x,
+                                            row = x.line,
+                                            column = x.position,
+                                            sourceFile = x.source)
+            case Some(x:AssetCompilationException) =>
+              throw PlayExceptionWithSource(genericTitle = x.title,
+                                            message = x.getMessage,
+                                            category = "ERROR",
+                                            severity = xsbti.Severity.Error,
+                                            wrapped = x,
+                                            row = x.line,
+                                            column = x.position,
+                                            sourceFile = x.source.get)
+            case _ | None => throw i
+          }
         case (_, _, _, _, _, _) =>
           log.info("------------------------------")
           log.info(s"Something else went wrong!!!!!")

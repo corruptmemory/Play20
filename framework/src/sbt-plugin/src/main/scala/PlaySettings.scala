@@ -88,8 +88,11 @@ trait PlaySettings {
     libraryDependencies += "com.typesafe.play" %% "play-test" % play.core.PlayVersion.current % "test",
 
     ivyConfigurations += DocsApplication,
+    ivyConfigurations += ForkRunner,
     libraryDependencies += "com.typesafe.play" %% "play-docs" % play.core.PlayVersion.current % DocsApplication.name,
+    libraryDependencies += "com.typesafe.play" %% "sbt-client" % play.core.PlayVersion.current % ForkRunner.name,
     manageClasspath(DocsApplication),
+    manageClasspath(ForkRunner),
 
     parallelExecution in Test := false,
 

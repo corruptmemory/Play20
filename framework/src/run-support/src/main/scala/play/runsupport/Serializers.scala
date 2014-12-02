@@ -100,76 +100,33 @@ object Serializers extends LowPrioritySerializers {
   implicit val assetCompilationExceptionWrites: Writes[AssetCompilationException] = Json.writes[AssetCompilationException]
   implicit val assetCompilationExceptionFormat: Format[AssetCompilationException] = Format[AssetCompilationException](assetCompilationExceptionReads, assetCompilationExceptionWrites)
 
-  def playExceptionNoSourceReads[T <: Throwable](implicit reads:Reads[T]): Reads[PlayExceptionNoSource[T]] =
-    ((JsPath \ "title").read[String] and
-     (JsPath \ "message").read[String] and
-     (JsPath \ "category").read[String] and
-     (JsPath \ "severity").read[xsbti.Severity] and
-     (JsPath \ "cause").read[T])(PlayExceptionNoSource.apply[T] _)
+  implicit val playExceptionNoSourceReads: Reads[PlayExceptionNoSource] = Json.reads[PlayExceptionNoSource]
+  implicit val playExceptionNoSourceWrites: Writes[PlayExceptionNoSource] = Json.writes[PlayExceptionNoSource]
+  implicit val playExceptionNoSourceFormat: Format[PlayExceptionNoSource] = Format[PlayExceptionNoSource](playExceptionNoSourceReads, playExceptionNoSourceWrites)
 
-  def playExceptionNoSourceWrites[T <: Throwable](implicit writes:Writes[T]): Writes[PlayExceptionNoSource[T]] =
-    ((JsPath \ "title").write[String] and
-     (JsPath \ "message").write[String] and
-     (JsPath \ "category").write[String] and
-     (JsPath \ "severity").write[xsbti.Severity] and
-     (JsPath \ "cause").write[T])(unlift(PlayExceptionNoSource.unapply[T]))
-
-  def playExceptionNoSourceFormat[T <: Throwable](implicit reads:Reads[T], writes:Writes[T]): Format[PlayExceptionNoSource[T]] = Format[PlayExceptionNoSource[T]](playExceptionNoSourceReads, playExceptionNoSourceWrites)
-
-  def playExceptionWithSourceReads[T <: Throwable](implicit reads:Reads[T]): Reads[PlayExceptionWithSource[T]] =
-    ((JsPath \ "title").read[String] and
-     (JsPath \ "message").read[String] and
-     (JsPath \ "category").read[String] and
-     (JsPath \ "severity").read[xsbti.Severity] and
-     (JsPath \ "cause").read[T] and
-     (JsPath \ "line").read[Int] and
-     (JsPath \ "column").read[Int] and
-     (JsPath \ "sourceFile").read[java.io.File])(PlayExceptionWithSource.apply[T] _)
-
-  def playExceptionWithSourceWrites[T <: Throwable](implicit writes:Writes[T]): Writes[PlayExceptionWithSource[T]] =
-    ((JsPath \ "title").write[String] and
-     (JsPath \ "message").write[String] and
-     (JsPath \ "category").write[String] and
-     (JsPath \ "severity").write[xsbti.Severity] and
-     (JsPath \ "cause").write[T] and
-     (JsPath \ "line").write[Int] and
-     (JsPath \ "column").write[Int] and
-     (JsPath \ "sourceFile").write[java.io.File])(unlift(PlayExceptionWithSource.unapply[T]))
-
-  def playExceptionWithSourceFormat[T <: Throwable](implicit reads:Reads[T], writes:Writes[T]): Format[PlayExceptionWithSource[T]] = Format[PlayExceptionWithSource[T]](playExceptionWithSourceReads, playExceptionWithSourceWrites)
-
-  implicit def forkRunnerExceptionReads[T <: Throwable](implicit rds:Reads[T]): Reads[ForkRunnerException[T]] = new Reads[ForkRunnerException[T]] {
-    def reads(in:JsValue):JsResult[ForkRunnerException[T]] = ((in \ "type"),(in \ "value")) match {
-      case (JsString("no-source"),v:JsValue) => playExceptionNoSourceReads[T](rds).reads(v)
-      case (JsString("with-source"),v:JsValue) => playExceptionWithSourceReads[T](rds).reads(v)
-      case _ => JsError("Cannot deserialize a ForkRunnerException: missing 'type' descriminator with a value of either 'no-source' or 'with-source'")
-    }
-  }
-  implicit def forkRunnerExceptionWrites[T <: Throwable](implicit wrts:Writes[T]): Writes[ForkRunnerException[T]] = new Writes[ForkRunnerException[T]] {
-    def writes(in:ForkRunnerException[T]):JsValue = in match {
-      case x:PlayExceptionNoSource[T] => Json.obj("type" -> "no-source", "value" -> playExceptionNoSourceWrites[T](wrts).writes(x))
-      case x:PlayExceptionWithSource[T] => Json.obj("type" -> "with-source", "value" -> playExceptionWithSourceWrites[T](wrts).writes(x))
-    }
-  }
-  implicit def forkRunnerExceptionFormat[T <: Throwable](implicit reads:Reads[T], writes:Writes[T]): Format[ForkRunnerException[T]] = Format[ForkRunnerException[T]](forkRunnerExceptionReads, forkRunnerExceptionWrites)
+  implicit val playExceptionWithSourceReads: Reads[PlayExceptionWithSource] = Json.reads[PlayExceptionWithSource]
+  implicit val playExceptionWithSourceWrites: Writes[PlayExceptionWithSource] = Json.writes[PlayExceptionWithSource]
+  implicit val playExceptionWithSourceFormat: Format[PlayExceptionWithSource] = Format[PlayExceptionWithSource](playExceptionWithSourceReads, playExceptionWithSourceWrites)
 
   val throwableDeserializers = ThrowableDeserializers.empty
+    .add[PlayExceptionWithSource]
+    .add[PlayExceptionNoSource]
+    .add[CompilationException]
     .add[TemplateCompilationException]
     .add[RoutesCompilationException]
     .add[AssetCompilationException]
     .add[CompileFailedException]
-    .add[CompilationException]
     .add[UnexpectedException]
-    .add[ForkRunnerException[PlayException]]
-    .add[ForkRunnerException[Throwable]]
 
   val formats: Seq[LocalRegisteredFormat] = List(LocalRegisteredFormat.fromFormat(playForkSupportResultFormat),
+    LocalRegisteredFormat.fromFormat(sourceMapTargetFormat),
+    LocalRegisteredFormat.fromFormat(sourceMapformat),
+    LocalRegisteredFormat.fromFormat(playExceptionWithSourceFormat),
+    LocalRegisteredFormat.fromFormat(playExceptionNoSourceFormat),
     LocalRegisteredFormat.fromFormat(compilationExceptionFormat),
     LocalRegisteredFormat.fromFormat(templateCompilationExceptionFormat),
     LocalRegisteredFormat.fromFormat(routesCompilationExceptionFormat),
     LocalRegisteredFormat.fromFormat(assetCompilationExceptionFormat),
-    LocalRegisteredFormat.fromFormat(unexpectedExceptionFormat),
-    LocalRegisteredFormat.fromFormat(forkRunnerExceptionFormat[PlayException]),
-    LocalRegisteredFormat.fromFormat(forkRunnerExceptionFormat[Throwable]))
+    LocalRegisteredFormat.fromFormat(unexpectedExceptionFormat))
 }
 
