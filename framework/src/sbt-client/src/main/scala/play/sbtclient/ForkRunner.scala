@@ -106,7 +106,7 @@ object ForkRunner {
       // Whether any source files have changed since the last request.
       @volatile private var changed = false
       // The last succesful source map
-      @volatile private var sourceMap = Option.empty[Map[String,SourceMapTarget]]
+      @volatile private var sourceMap = Option.empty[Map[String, SourceMapTarget]]
       // A watch state for the classpath. Used to determine whether anything on the classpath has changed as a result
       // of compilation, and therefore a new classloader is needed and the app needs to be reloaded.
       @volatile private var watchState: WatchState = WatchState.empty
@@ -181,9 +181,11 @@ object ForkRunner {
 
       def findSource(className: String, line: java.lang.Integer): Array[java.lang.Object] = {
         val topType = className.split('$').head
-        sourceMap.flatMap { _.get(topType).map { st =>
-          Array[java.lang.Object](st.originalSource.getOrElse(st.sourceFile), line)
-        }}.orNull
+        sourceMap.flatMap {
+          _.get(topType).map { st =>
+            Array[java.lang.Object](st.originalSource.getOrElse(st.sourceFile), line)
+          }
+        }.orNull
       }
 
       private def taskFailureHandler(in: Throwable): Exception = {
@@ -241,7 +243,7 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    def config(projectRoot:File) = ConfigFactory.parseFileAnySyntax(new File(projectRoot,"conf/application.conf")).getConfig("play-dev")
+    def config(projectRoot: File) = ConfigFactory.parseFileAnySyntax(new File(projectRoot, "conf/application.conf")).getConfig("play-dev")
     // val config = ConfigFactory.parseString("""
     //   |akka {
     //   |  loglevel = ERROR

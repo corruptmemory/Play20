@@ -16,23 +16,22 @@ sealed trait ForkRunnerException { this: PlayException =>
 }
 
 case class PlayExceptionNoSource(genericTitle: String,
-                                 message: String,
-                                 category: String,
-                                 severity: xsbti.Severity,
-                                 wrapped: Throwable) extends PlayException(genericTitle, message, wrapped) with ForkRunnerException
+  message: String,
+  category: String,
+  severity: xsbti.Severity,
+  wrapped: Throwable) extends PlayException(genericTitle, message, wrapped) with ForkRunnerException
 
 case class PlayExceptionWithSource(genericTitle: String,
-                                   message: String,
-                                   category: String,
-                                   severity: xsbti.Severity,
-                                   wrapped: Throwable,
-                                   row: Int,
-                                   column: Int,
-                                   sourceFile: java.io.File) extends PlayException.ExceptionSource(genericTitle, message, wrapped) with ForkRunnerException {
+    message: String,
+    category: String,
+    severity: xsbti.Severity,
+    wrapped: Throwable,
+    row: Int,
+    column: Int,
+    sourceFile: java.io.File) extends PlayException.ExceptionSource(genericTitle, message, wrapped) with ForkRunnerException {
   def line = row
   def position = column
   def input = IO.read(sourceFile)
   def sourceName = sourceFile.getAbsolutePath
 }
-
 

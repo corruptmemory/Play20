@@ -10,9 +10,9 @@ import sbt.GenericSerializers._
 import sbt.protocol._
 import play.api.PlayException
 
-trait LowPrioritySerializers { this:Serializers.type =>
+trait LowPrioritySerializers { this: Serializers.type =>
   implicit val playExceptionWrites: Writes[PlayException] = new Writes[PlayException] {
-    def writes(in:PlayException):JsValue = in match {
+    def writes(in: PlayException): JsValue = in match {
       case x: UnexpectedException => unexpectedExceptionWrites.writes(x)
       case x: CompilationException => compilationExceptionWrites.writes(x)
       case x: TemplateCompilationException => templateCompilationExceptionWrites.writes(x)
@@ -22,15 +22,15 @@ trait LowPrioritySerializers { this:Serializers.type =>
   }
 
   implicit val playExceptionReads: Reads[PlayException] = new Reads[PlayException] {
-    def reads(in:JsValue):JsResult[PlayException] =
+    def reads(in: JsValue): JsResult[PlayException] =
       unexpectedExceptionReads.reads(in) orElse
-      compilationExceptionReads.reads(in) orElse
-      templateCompilationExceptionReads.reads(in) orElse
-      routesCompilationExceptionReads.reads(in) orElse
-      assetCompilationExceptionReads.reads(in)
+        compilationExceptionReads.reads(in) orElse
+        templateCompilationExceptionReads.reads(in) orElse
+        routesCompilationExceptionReads.reads(in) orElse
+        assetCompilationExceptionReads.reads(in)
   }
 
-  implicit val playExceptionFormat:Format[PlayException] = Format[PlayException](playExceptionReads,playExceptionWrites)
+  implicit val playExceptionFormat: Format[PlayException] = Format[PlayException](playExceptionReads, playExceptionWrites)
 }
 
 object Serializers extends LowPrioritySerializers {
@@ -72,9 +72,9 @@ object Serializers extends LowPrioritySerializers {
   implicit val sourceMapTargetReads: Reads[SourceMapTarget] = Json.reads[SourceMapTarget]
   implicit val sourceMapTargetFormat: Format[SourceMapTarget] = Format[SourceMapTarget](sourceMapTargetReads, sourceMapTargetWrites)
 
-  implicit val sourceMapWrites:Writes[Map[String,SourceMapTarget]] = Writes.mapWrites[SourceMapTarget]
-  implicit val sourceMapReads:Reads[Map[String,SourceMapTarget]] = Reads.mapReads[SourceMapTarget]
-  implicit val sourceMapformat:Format[Map[String,SourceMapTarget]] = Format[Map[String,SourceMapTarget]](sourceMapReads, sourceMapWrites)
+  implicit val sourceMapWrites: Writes[Map[String, SourceMapTarget]] = Writes.mapWrites[SourceMapTarget]
+  implicit val sourceMapReads: Reads[Map[String, SourceMapTarget]] = Reads.mapReads[SourceMapTarget]
+  implicit val sourceMapformat: Format[Map[String, SourceMapTarget]] = Format[Map[String, SourceMapTarget]](sourceMapReads, sourceMapWrites)
 
   implicit val playForkSupportResultWrites: Writes[PlayForkSupportResult] = Json.writes[PlayForkSupportResult]
   implicit val playForkSupportResultReads: Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]

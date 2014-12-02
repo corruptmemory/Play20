@@ -340,9 +340,9 @@ trait PlayRun extends PlayInternalKeys {
       findRoutesCompilationException(in) orElse
       findAssetCompilationException(in)
 
-  def extractSourceMap(in:sbt.inc.Analysis):Map[String,SourceMapTarget] = {
-    in.apis.internal.foldLeft(Map.empty[String,SourceMapTarget]) {
-      case (s,(sourceFile, source)) => s ++ (source.api.definitions.map(d => (d.name -> SourceMapTarget(sourceFile, play.twirl.compiler.MaybeGeneratedSource.unapply(sourceFile).map(_.file)))))
+  def extractSourceMap(in: sbt.inc.Analysis): Map[String, SourceMapTarget] = {
+    in.apis.internal.foldLeft(Map.empty[String, SourceMapTarget]) {
+      case (s, (sourceFile, source)) => s ++ (source.api.definitions.map(d => (d.name -> SourceMapTarget(sourceFile, play.twirl.compiler.MaybeGeneratedSource.unapply(sourceFile).map(_.file)))))
     }
   }
   /**
@@ -395,44 +395,44 @@ trait PlayRun extends PlayInternalKeys {
           log.info(s"Compile failed: $i => $ex")
           log.info("------------------------------")
           ex match {
-            case Some(x:UnexpectedException) =>
-              throw PlayExceptionNoSource("UnexpectedException",x.getMessage,"ERROR",xsbti.Severity.Error,x)
-            case Some(x:CompilationException) =>
+            case Some(x: UnexpectedException) =>
+              throw PlayExceptionNoSource("UnexpectedException", x.getMessage, "ERROR", xsbti.Severity.Error, x)
+            case Some(x: CompilationException) =>
               throw PlayExceptionWithSource(genericTitle = x.title,
-                                            message = x.getMessage,
-                                            category = x.problem.category,
-                                            severity = x.problem.severity,
-                                            wrapped = x,
-                                            row = x.line,
-                                            column = x.position,
-                                            sourceFile = x.problem.position.sourceFile.get)
-            case Some(x:TemplateCompilationException) =>
+                message = x.getMessage,
+                category = x.problem.category,
+                severity = x.problem.severity,
+                wrapped = x,
+                row = x.line,
+                column = x.position,
+                sourceFile = x.problem.position.sourceFile.get)
+            case Some(x: TemplateCompilationException) =>
               throw PlayExceptionWithSource(genericTitle = x.title,
-                                            message = x.getMessage,
-                                            category = "ERROR",
-                                            severity = xsbti.Severity.Error,
-                                            wrapped = x,
-                                            row = x.line,
-                                            column = x.position,
-                                            sourceFile = x.source)
-            case Some(x:RoutesCompilationException) =>
+                message = x.getMessage,
+                category = "ERROR",
+                severity = xsbti.Severity.Error,
+                wrapped = x,
+                row = x.line,
+                column = x.position,
+                sourceFile = x.source)
+            case Some(x: RoutesCompilationException) =>
               throw PlayExceptionWithSource(genericTitle = x.title,
-                                            message = x.getMessage,
-                                            category = "ERROR",
-                                            severity = xsbti.Severity.Error,
-                                            wrapped = x,
-                                            row = x.line,
-                                            column = x.position,
-                                            sourceFile = x.source)
-            case Some(x:AssetCompilationException) =>
+                message = x.getMessage,
+                category = "ERROR",
+                severity = xsbti.Severity.Error,
+                wrapped = x,
+                row = x.line,
+                column = x.position,
+                sourceFile = x.source)
+            case Some(x: AssetCompilationException) =>
               throw PlayExceptionWithSource(genericTitle = x.title,
-                                            message = x.getMessage,
-                                            category = "ERROR",
-                                            severity = xsbti.Severity.Error,
-                                            wrapped = x,
-                                            row = x.line,
-                                            column = x.position,
-                                            sourceFile = x.source.get)
+                message = x.getMessage,
+                category = "ERROR",
+                severity = xsbti.Severity.Error,
+                wrapped = x,
+                row = x.line,
+                column = x.position,
+                sourceFile = x.source.get)
             case _ | None => throw i
           }
         case (_, _, _, _, _, _) =>
