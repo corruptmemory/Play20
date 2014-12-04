@@ -234,7 +234,10 @@ object ForkRunner {
   }
 
   object AkkaConfig {
-    def config(projectRoot: File) = ConfigFactory.parseFileAnySyntax(new File(projectRoot, "conf/application.conf")).getConfig("play-dev")
+    def config(projectRoot: File) = {
+      val fallback = ConfigFactory.load()
+      ConfigFactory.parseFileAnySyntax(new File(projectRoot, "conf/application.conf")).withFallback(fallback).getConfig("play-dev")
+    }
   }
 
   def main(args: Array[String]): Unit = {
