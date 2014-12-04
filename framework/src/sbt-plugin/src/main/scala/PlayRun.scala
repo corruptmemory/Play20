@@ -121,7 +121,7 @@ trait PlayRun extends PlayInternalKeys {
         logger.debug(s"boostrapClasspath: $boostrapClasspath")
 
         val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
-          runJVMOptions = javaOptions ++ Seq("-Dconfig.trace=loads"))
+          runJVMOptions = javaOptions)
         val runner = new ForkRun(runnerOptions)
         val baseDirectoryString = baseDirectory.getAbsolutePath()
         val buildUriString = projectRef.build.toString
@@ -297,12 +297,6 @@ trait PlayRun extends PlayInternalKeys {
     }
   }
 
-  // def findCompilationFailure(in: Throwable): Option[xsbti.CompileFailed] =
-  //   findUnderlyingFailure(in) {
-  //     case x: xsbti.CompileFailed => Some(x)
-  //     case _ => None
-  //   }
-
   def findUnexpectedException(in: Throwable): Option[UnexpectedException] =
     findUnderlyingFailure(in) {
       case x: UnexpectedException => Some(x)
@@ -467,7 +461,7 @@ trait PlayRun extends PlayInternalKeys {
           log.info("------------------------------")
           log.info(s"Something else went wrong!!!!!")
           log.info("------------------------------")
-          throw new Exception("WFT?")
+          throw new Exception("WTF?")
       }
 
   }

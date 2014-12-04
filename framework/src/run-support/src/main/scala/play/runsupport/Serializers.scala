@@ -10,30 +10,7 @@ import sbt.GenericSerializers._
 import sbt.protocol._
 import play.api.PlayException
 
-trait LowPrioritySerializers { this: Serializers.type =>
-  implicit val playExceptionWrites: Writes[PlayException] = new Writes[PlayException] {
-    def writes(in: PlayException): JsValue = in match {
-      case x: UnexpectedException => unexpectedExceptionWrites.writes(x)
-      case x: CompilationException => compilationExceptionWrites.writes(x)
-      case x: TemplateCompilationException => templateCompilationExceptionWrites.writes(x)
-      case x: RoutesCompilationException => routesCompilationExceptionWrites.writes(x)
-      case x: AssetCompilationException => assetCompilationExceptionWrites.writes(x)
-    }
-  }
-
-  implicit val playExceptionReads: Reads[PlayException] = new Reads[PlayException] {
-    def reads(in: JsValue): JsResult[PlayException] =
-      unexpectedExceptionReads.reads(in) orElse
-        compilationExceptionReads.reads(in) orElse
-        templateCompilationExceptionReads.reads(in) orElse
-        routesCompilationExceptionReads.reads(in) orElse
-        assetCompilationExceptionReads.reads(in)
-  }
-
-  implicit val playExceptionFormat: Format[PlayException] = Format[PlayException](playExceptionReads, playExceptionWrites)
-}
-
-object Serializers extends LowPrioritySerializers {
+object Serializers {
 
   implicit def tuple2Reads[A, B](implicit aReads: Reads[A], bReads: Reads[B]): Reads[(A, B)] = Reads[(A, B)] { i =>
     i.validate[JsArray].flatMap { arr =>
@@ -80,25 +57,25 @@ object Serializers extends LowPrioritySerializers {
   implicit val playForkSupportResultReads: Reads[PlayForkSupportResult] = Json.reads[PlayForkSupportResult]
   implicit val playForkSupportResultFormat: Format[PlayForkSupportResult] = Format[PlayForkSupportResult](playForkSupportResultReads, playForkSupportResultWrites)
 
-  implicit val unexpectedExceptionReads: Reads[UnexpectedException] = Json.reads[UnexpectedException]
-  implicit val unexpectedExceptionWrites: Writes[UnexpectedException] = Json.writes[UnexpectedException]
-  implicit val unexpectedExceptionFormat: Format[UnexpectedException] = Format[UnexpectedException](unexpectedExceptionReads, unexpectedExceptionWrites)
+  // implicit val unexpectedExceptionReads: Reads[UnexpectedException] = Json.reads[UnexpectedException]
+  // implicit val unexpectedExceptionWrites: Writes[UnexpectedException] = Json.writes[UnexpectedException]
+  // implicit val unexpectedExceptionFormat: Format[UnexpectedException] = Format[UnexpectedException](unexpectedExceptionReads, unexpectedExceptionWrites)
 
-  implicit val compilationExceptionReads: Reads[CompilationException] = Json.reads[CompilationException]
-  implicit val compilationExceptionWrites: Writes[CompilationException] = Json.writes[CompilationException]
-  implicit val compilationExceptionFormat: Format[CompilationException] = Format[CompilationException](compilationExceptionReads, compilationExceptionWrites)
+  // implicit val compilationExceptionReads: Reads[CompilationException] = Json.reads[CompilationException]
+  // implicit val compilationExceptionWrites: Writes[CompilationException] = Json.writes[CompilationException]
+  // implicit val compilationExceptionFormat: Format[CompilationException] = Format[CompilationException](compilationExceptionReads, compilationExceptionWrites)
 
-  implicit val templateCompilationExceptionReads: Reads[TemplateCompilationException] = Json.reads[TemplateCompilationException]
-  implicit val templateCompilationExceptionWrites: Writes[TemplateCompilationException] = Json.writes[TemplateCompilationException]
-  implicit val templateCompilationExceptionFormat: Format[TemplateCompilationException] = Format[TemplateCompilationException](templateCompilationExceptionReads, templateCompilationExceptionWrites)
+  // implicit val templateCompilationExceptionReads: Reads[TemplateCompilationException] = Json.reads[TemplateCompilationException]
+  // implicit val templateCompilationExceptionWrites: Writes[TemplateCompilationException] = Json.writes[TemplateCompilationException]
+  // implicit val templateCompilationExceptionFormat: Format[TemplateCompilationException] = Format[TemplateCompilationException](templateCompilationExceptionReads, templateCompilationExceptionWrites)
 
-  implicit val routesCompilationExceptionReads: Reads[RoutesCompilationException] = Json.reads[RoutesCompilationException]
-  implicit val routesCompilationExceptionWrites: Writes[RoutesCompilationException] = Json.writes[RoutesCompilationException]
-  implicit val routesCompilationExceptionFormat: Format[RoutesCompilationException] = Format[RoutesCompilationException](routesCompilationExceptionReads, routesCompilationExceptionWrites)
+  // implicit val routesCompilationExceptionReads: Reads[RoutesCompilationException] = Json.reads[RoutesCompilationException]
+  // implicit val routesCompilationExceptionWrites: Writes[RoutesCompilationException] = Json.writes[RoutesCompilationException]
+  // implicit val routesCompilationExceptionFormat: Format[RoutesCompilationException] = Format[RoutesCompilationException](routesCompilationExceptionReads, routesCompilationExceptionWrites)
 
-  implicit val assetCompilationExceptionReads: Reads[AssetCompilationException] = Json.reads[AssetCompilationException]
-  implicit val assetCompilationExceptionWrites: Writes[AssetCompilationException] = Json.writes[AssetCompilationException]
-  implicit val assetCompilationExceptionFormat: Format[AssetCompilationException] = Format[AssetCompilationException](assetCompilationExceptionReads, assetCompilationExceptionWrites)
+  // implicit val assetCompilationExceptionReads: Reads[AssetCompilationException] = Json.reads[AssetCompilationException]
+  // implicit val assetCompilationExceptionWrites: Writes[AssetCompilationException] = Json.writes[AssetCompilationException]
+  // implicit val assetCompilationExceptionFormat: Format[AssetCompilationException] = Format[AssetCompilationException](assetCompilationExceptionReads, assetCompilationExceptionWrites)
 
   implicit val playExceptionNoSourceReads: Reads[PlayExceptionNoSource] = Json.reads[PlayExceptionNoSource]
   implicit val playExceptionNoSourceWrites: Writes[PlayExceptionNoSource] = Json.writes[PlayExceptionNoSource]
@@ -111,22 +88,11 @@ object Serializers extends LowPrioritySerializers {
   val throwableDeserializers = ThrowableDeserializers.empty
     .add[PlayExceptionWithSource]
     .add[PlayExceptionNoSource]
-    .add[CompilationException]
-    .add[TemplateCompilationException]
-    .add[RoutesCompilationException]
-    .add[AssetCompilationException]
-    .add[CompileFailedException]
-    .add[UnexpectedException]
 
   val formats: Seq[LocalRegisteredFormat] = List(LocalRegisteredFormat.fromFormat(playForkSupportResultFormat),
     LocalRegisteredFormat.fromFormat(sourceMapTargetFormat),
     LocalRegisteredFormat.fromFormat(sourceMapformat),
     LocalRegisteredFormat.fromFormat(playExceptionWithSourceFormat),
-    LocalRegisteredFormat.fromFormat(playExceptionNoSourceFormat),
-    LocalRegisteredFormat.fromFormat(compilationExceptionFormat),
-    LocalRegisteredFormat.fromFormat(templateCompilationExceptionFormat),
-    LocalRegisteredFormat.fromFormat(routesCompilationExceptionFormat),
-    LocalRegisteredFormat.fromFormat(assetCompilationExceptionFormat),
-    LocalRegisteredFormat.fromFormat(unexpectedExceptionFormat))
+    LocalRegisteredFormat.fromFormat(playExceptionNoSourceFormat))
 }
 

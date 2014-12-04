@@ -13,7 +13,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import play.runsupport.protocol.{ PlayForkSupportResult, SourceMapTarget }
 import play.runsupport.{ PlayExceptionNoSource, PlayExceptionWithSource }
 import play.core.{ BuildLink, BuildDocHandler }
-import play.core.classloader.{ DelegatingClassLoader, ApplicationClassLoaderProvider }
+import play.core.classloader.ApplicationClassLoaderProvider
 import scala.concurrent.{ Promise, Future }
 import play.runsupport.{ PlayWatchService, LoggerProxy, AssetsClassLoader }
 import sbt.{ IO, PathFinder, WatchState, SourceModificationWatch }
@@ -58,9 +58,7 @@ object ForkRunner {
     new java.net.URLClassLoader(urls, parent) {
       require(parent ne null)
       override def getResources(name: String): java.util.Enumeration[java.net.URL] = {
-        val r = getParent.getResources(name)
-        println(s"Looking for: $name, found: $r")
-        r
+        getParent.getResources(name)
       }
       override def toString = name + "{" + getURLs.map(_.toString).mkString(", ") + "}"
     }
@@ -71,21 +69,14 @@ object ForkRunner {
     else None
 
   // commonClassLoader: ClassLoader
-  private[this] var commonClassLoader: ClassLoader = _
-
-  // commonClassLoader: ClassLoader
   def playCommonClassloaderTask(classpath: Classpath) = {
     lazy val commonJars: PartialFunction[java.io.File, java.net.URL] = {
       case jar if jar.getName.startsWith("h2-") || jar.getName == "h2.jar" => jar.toURI.toURL
     }
 
-    if (commonClassLoader == null) {
-      commonClassLoader = new java.net.URLClassLoader(classpath.collect(commonJars).toArray, null /* important here, don't depend of the sbt classLoader! */ ) {
-        override def toString = "Common ClassLoader: " + getURLs.map(_.toString).mkString(",")
-      }
+    new java.net.URLClassLoader(classpath.collect(commonJars).toArray, null /* important here, don't depend of the sbt classLoader! */ ) {
+      override def toString = "Common ClassLoader: " + getURLs.map(_.toString).mkString(",")
     }
-
-    commonClassLoader
   }
 
   def newReloader(runReload: () => Either[Throwable, PlayForkSupportResult],
@@ -244,11 +235,6 @@ object ForkRunner {
 
   object AkkaConfig {
     def config(projectRoot: File) = ConfigFactory.parseFileAnySyntax(new File(projectRoot, "conf/application.conf")).getConfig("play-dev")
-    // val config = ConfigFactory.parseString("""
-    //   |akka {
-    //   |  loglevel = ERROR
-    //   |  stdout-loglevel = ERROR
-    //   |}""".stripMargin)
   }
 
   def main(args: Array[String]): Unit = {
@@ -260,6 +246,7 @@ object ForkRunner {
     val httpsPort: Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
     val akkaConfig = AkkaConfig.config(new File(baseDirectoryString))
+    val buildUri = new URI(buildUriString)
 
     val system = ActorSystem("play-dev-mode-runner", akkaConfig)
     val log = system.log
@@ -276,8 +263,8 @@ object ForkRunner {
     val latch = new CountDownLatch(1)
     val projectDir = new File(baseDirectoryString)
     val conn = SbtConnector("play-fork", "play-fork", projectDir)
-    val serverBuilder = runServer(httpPort, httpsPort, new File(buildUriString), new File(targetDirectory), pollDelayMillis, wrapLogger(log))_
-    val config = Config(conn, latch, s"$project/play-default-fork-run-support", projectDir, new URI(buildUriString), project, serverBuilder)
+    val serverBuilder = runServer(httpPort, httpsPort, new File(buildUri), new File(targetDirectory), pollDelayMillis, wrapLogger(log))_
+    val config = Config(conn, latch, s"$project/play-default-fork-run-support", projectDir, buildUri, project, serverBuilder)
     val runner = system.actorOf(Props(new ForkRunner(config)))
     log.debug("Awaiting ForkRunner shutdown")
     latch.await()

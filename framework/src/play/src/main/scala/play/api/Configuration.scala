@@ -32,32 +32,20 @@ object Configuration {
    * @return  configuration to be used
    */
   private[play] def loadDev(appPath: File, devSettings: Map[String, String]): Config = {
-    println(s"in loadDev(appPath = $appPath, devSettings = $devSettings)")
-    val r = try {
+    try {
       lazy val file = {
         devSettings.get("config.file").orElse(Option(System.getProperty("config.file")))
           .map(f => new File(f)).getOrElse(new File(appPath, "conf/application.conf"))
       }
-      println(s"in loadDev - file $file")
       val config = Option(System.getProperty("config.resource"))
         .map { r =>
-          println(s"Loading resource: $r")
           ConfigFactory.parseResources(r)
-        } getOrElse {
-          println(s"Loaded: $file")
-          ConfigFactory.parseFileAnySyntax(file)
-        }
+        } getOrElse { ConfigFactory.parseFileAnySyntax(file) }
 
-      println(s"preliminary config: $config")
-      val e = ConfigFactory.parseMap(devSettings.asJava).withFallback(ConfigFactory.load(config))
-      println(s"Final config: $e")
-      e
+      ConfigFactory.parseMap(devSettings.asJava).withFallback(ConfigFactory.load(config))
     } catch {
       case e: ConfigException => throw configError(e.origin, e.getMessage, Some(e))
     }
-    println(s"Loaded config: $r")
-
-    r
   }
 
   /**
@@ -73,15 +61,12 @@ object Configuration {
    * @return a `Configuration` instance
    */
   def load(appPath: File, mode: Mode.Mode = Mode.Dev, devSettings: Map[String, String] = Map.empty) = {
-    println(s"in load(appPath = $appPath, mode = $mode, devSettings = $devSettings)")
-    val r = try {
+    try {
       val currentMode = Play.maybeApplication.map(_.mode).getOrElse(mode)
       if (currentMode == Mode.Prod) Configuration(dontAllowMissingConfig) else Configuration(loadDev(appPath, devSettings))
     } catch {
       case e: ConfigException => throw configError(e.origin, e.getMessage, Some(e))
     }
-    println(s"Wrapped config: $r")
-    r
   }
 
   /**
