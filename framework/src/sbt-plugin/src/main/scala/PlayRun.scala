@@ -101,35 +101,35 @@ trait PlayRun extends PlayInternalKeys {
     docsClasspath: Classpath,
     defaultHttpPort: Int,
     pollDelayMillis: Int,
-    args: Seq[String]):Runnable = new Runnable {
+    args: Seq[String]): Runnable = new Runnable {
 
-      def run():Unit = {
-        logger.debug(s"baseDirectory: $baseDirectory")
-        logger.debug(s"projectDirectory: $projectDirectory")
-        logger.debug(s"projectRef: $projectRef")
-        logger.debug(s"javaOptions: $javaOptions")
-        logger.debug(s"forkRunnerClasspath: $forkRunnerClasspath")
-        logger.debug(s"dependencyClasspath: $dependencyClasspath")
-        logger.debug(s"monitoredFiles: $monitoredFiles")
-        logger.debug(s"targetDirectory: $targetDirectory")
-        logger.debug(s"docsClasspath: $docsClasspath")
-        logger.debug(s"defaultHttpPort: $defaultHttpPort")
-        logger.debug(s"pollDelayMillis: $pollDelayMillis")
-        logger.debug(s"args: $args")
+    def run(): Unit = {
+      logger.debug(s"baseDirectory: $baseDirectory")
+      logger.debug(s"projectDirectory: $projectDirectory")
+      logger.debug(s"projectRef: $projectRef")
+      logger.debug(s"javaOptions: $javaOptions")
+      logger.debug(s"forkRunnerClasspath: $forkRunnerClasspath")
+      logger.debug(s"dependencyClasspath: $dependencyClasspath")
+      logger.debug(s"monitoredFiles: $monitoredFiles")
+      logger.debug(s"targetDirectory: $targetDirectory")
+      logger.debug(s"docsClasspath: $docsClasspath")
+      logger.debug(s"defaultHttpPort: $defaultHttpPort")
+      logger.debug(s"pollDelayMillis: $pollDelayMillis")
+      logger.debug(s"args: $args")
 
-        val boostrapClasspath = (forkRunnerClasspath.map(_.data) ++ dependencyClasspath.map(_.data)).toSet.toSeq
-        logger.debug(s"boostrapClasspath: $boostrapClasspath")
+      val boostrapClasspath = (forkRunnerClasspath.map(_.data) ++ dependencyClasspath.map(_.data)).toSet.toSeq
+      logger.debug(s"boostrapClasspath: $boostrapClasspath")
 
-        val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
-          runJVMOptions = javaOptions)
-        val runner = new ForkRun(runnerOptions)
-        val baseDirectoryString = baseDirectory.getAbsolutePath()
-        val buildUriString = projectRef.build.toString
-        val project = projectRef.project
+      val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),
+        runJVMOptions = javaOptions)
+      val runner = new ForkRun(runnerOptions)
+      val baseDirectoryString = baseDirectory.getAbsolutePath()
+      val buildUriString = projectRef.build.toString
+      val project = projectRef.project
 
-        runner.run("play.forkrunner.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
-      }
+      runner.run("play.forkrunner.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
     }
+  }
 
   def playRunForked(logger: Logger,
     baseDirectory: File,
@@ -145,18 +145,18 @@ trait PlayRun extends PlayInternalKeys {
     pollDelayMillis: Int,
     args: Seq[String]): Unit = {
     val runnable = buildPlayRunForkedRunnable(logger,
-    baseDirectory,
-    projectDirectory,
-    projectRef,
-    javaOptions,
-    forkRunnerClasspath,
-    dependencyClasspath,
-    monitoredFiles,
-    targetDirectory,
-    docsClasspath,
-    defaultHttpPort,
-    pollDelayMillis,
-    args)
+      baseDirectory,
+      projectDirectory,
+      projectRef,
+      javaOptions,
+      forkRunnerClasspath,
+      dependencyClasspath,
+      monitoredFiles,
+      targetDirectory,
+      docsClasspath,
+      defaultHttpPort,
+      pollDelayMillis,
+      args)
     runnable.run()
   }
 

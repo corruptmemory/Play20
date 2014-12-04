@@ -165,20 +165,20 @@ trait PlaySettings {
 
     playBackgroundRunTaskBuilder := { javaOptions =>
       backgroundPlayRunTask(Keys.resolvedScoped.value,
-                            UIKeys.jobService.value,
-                            (Keys.baseDirectory in ThisBuild).value,
-                            (Keys.baseDirectory in ThisProject).value,
-                            Project.extract(Keys.state.value).currentRef,
-                            javaOptions,
-                            (managedClasspath in ForkRunner).value,
-                            playDependencyClasspath.value,
-                            playMonitoredFiles.value,
-                            target.value,
-                            (managedClasspath in DocsApplication).value,
-                            playDefaultPort.value,
-                            pollInterval.value,
-                            Seq[String]())
-      },
+        UIKeys.jobService.value,
+        (Keys.baseDirectory in ThisBuild).value,
+        (Keys.baseDirectory in ThisProject).value,
+        Project.extract(Keys.state.value).currentRef,
+        javaOptions,
+        (managedClasspath in ForkRunner).value,
+        playDependencyClasspath.value,
+        playMonitoredFiles.value,
+        target.value,
+        (managedClasspath in DocsApplication).value,
+        playDefaultPort.value,
+        pollInterval.value,
+        Seq[String]())
+    },
 
     // all dependencies from outside the project (all dependency jars)
     playDependencyClasspath <<= externalDependencyClasspath in Runtime,
