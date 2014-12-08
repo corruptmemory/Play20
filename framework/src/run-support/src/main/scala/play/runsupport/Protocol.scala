@@ -12,4 +12,4 @@ object protocol {
     docsClasspath: Seq[java.io.File])
 }
 
-final case class PlayServerStarted(url:String)
+final case class PlayServerStarted(url: String)

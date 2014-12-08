@@ -17,7 +17,7 @@ import WebKeys._
 import scala.language.postfixOps
 import play.twirl.sbt.Import.TwirlKeys
 import play.api.libs.json.Format
-import complete.{Parser, DefaultParsers}, DefaultParsers._
+import complete.{ Parser, DefaultParsers }, DefaultParsers._
 
 trait PlaySettings {
   this: PlayCommands with PlayPositionMapper with PlayRun with PlaySourceGenerators =>
@@ -49,7 +49,7 @@ trait PlaySettings {
     Classpaths.managedJars(config, ct, report)
   }
 
-  private val playNotifyServerStartParser:Parser[String] = (token(SpaceClass.*) ~> token(StringBasic)) <~ SpaceClass.*
+  private val playNotifyServerStartParser: Parser[String] = (token(SpaceClass.*) ~> token(StringBasic)) <~ SpaceClass.*
 
   lazy val defaultSettings = Defaults.packageTaskSettings(playPackageAssets, playPackageAssetsMappings) ++ Seq[Setting[_]](
 
