@@ -149,7 +149,7 @@ trait PlaySettings {
       import Serializers._
       val url = playNotifyServerStartParser.parsed
       val sendEventService = UIKeys.sendEventService.value
-      sendEventService.sendEvent(protocol.PlayServerStarted(url))(play.runsupport.Serializers.playServerStartedWrites)
+      sendEventService.sendEvent(play.runsupport.PlayServerStarted(url))(play.runsupport.Serializers.playServerStartedWrites)
     },
 
     playStop := {
