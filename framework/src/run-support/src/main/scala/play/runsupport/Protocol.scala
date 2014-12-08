@@ -10,5 +10,7 @@ object protocol {
     monitoredFiles: Seq[String],
     devSettings: Seq[(String, String)],
     docsClasspath: Seq[java.io.File])
+
+  final case class PlayServerStarted(url:String)
 }
 

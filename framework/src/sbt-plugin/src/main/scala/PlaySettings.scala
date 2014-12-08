@@ -3,7 +3,7 @@
  */
 package play
 
-import play.runsupport.PlayWatchService
+import play.runsupport.{ PlayWatchService, protocol, Serializers }
 import play.sbtplugin.run._
 import sbt._
 import sbt.Keys._
@@ -16,8 +16,8 @@ import com.typesafe.sbt.web.SbtWeb.autoImport._
 import WebKeys._
 import scala.language.postfixOps
 import play.twirl.sbt.Import.TwirlKeys
-import play.runsupport.Serializers
 import play.api.libs.json.Format
+import complete.{Parser, DefaultParsers}, DefaultParsers._
 
 trait PlaySettings {
   this: PlayCommands with PlayPositionMapper with PlayRun with PlaySourceGenerators =>
@@ -48,6 +48,8 @@ trait PlaySettings {
   def manageClasspath(config: Configuration) = managedClasspath in config <<= (classpathTypes in config, update) map { (ct, report) =>
     Classpaths.managedJars(config, ct, report)
   }
+
+  private val playNotifyServerStartParser:Parser[String] = (token(SpaceClass.*) ~> token(StringBasic)) <~ SpaceClass.*
 
   lazy val defaultSettings = Defaults.packageTaskSettings(playPackageAssets, playPackageAssetsMappings) ++ Seq[Setting[_]](
 
@@ -142,6 +144,13 @@ trait PlaySettings {
     UIKeys.backgroundRunMain in ThisProject := playBackgroundRunTaskBuilder.value((Keys.javaOptions in Runtime).value),
 
     UIKeys.backgroundRun in ThisProject := playBackgroundRunTaskBuilder.value((Keys.javaOptions in Runtime).value),
+
+    playNotifyServerStart in ThisProject := {
+      import Serializers._
+      val url = playNotifyServerStartParser.parsed
+      val sendEventService = UIKeys.sendEventService.value
+      sendEventService.sendEvent(protocol.PlayServerStarted(url))(play.runsupport.Serializers.playServerStartedWrites)
+    },
 
     playStop := {
       playInteractionMode.value match {

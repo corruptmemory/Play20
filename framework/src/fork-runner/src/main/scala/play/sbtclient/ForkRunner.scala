@@ -213,7 +213,10 @@ object ForkRunner {
     projectDir: File,
     buildUri: URI,
     project: String,
-    serverBuilder: PlayForkSupportResult => (() => Either[Throwable, PlayForkSupportResult]) => PlayDevServer)
+    serverBuilder: PlayForkSupportResult => (() => Either[Throwable, PlayForkSupportResult]) => PlayDevServer) {
+
+    def notifyServerStartCommand(urlString:String):String = s"$project/playNotifyServerStart $urlString"
+  }
 
   object Int {
     def unapply(s: String): Option[Int] = try {
@@ -278,6 +281,7 @@ object ForkRunner {
 
   private[forkrunner] trait PlayDevServer extends Closeable {
     val buildLink: BuildLink
+    def urlString:String
   }
 
   def runServer(httpPort: Option[Int],
@@ -330,6 +334,11 @@ object ForkRunner {
       new PlayDevServer {
         val buildLink = reloader
 
+        val urlString:String = httpPort match {
+          case Some(port) => s"http://localhost:$port"
+          case None => s"https://localhost:${httpsPort.get}"
+        }
+
         def close() = {
           server.stop()
           docsJarFile.close()
@@ -367,6 +376,7 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
     client ! SbtClientProxy.RequestExecution.ByScopedKey(command, None, self)
 
     {
+      case _:SbtClientProxy.ExecutionId => // ignore?
       case SbtClientProxy.WatchEvent(`command`, result) =>
         result.resultWithCustomThrowables[PlayForkSupportResult](Serializers.throwableDeserializers) match {
           case Success(x) =>
@@ -386,9 +396,39 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
   }
 
   private def waitingForReload(client: ActorRef, command: ScopedKey, server: PlayDevServer): Receive = {
+    case _:SbtClientProxy.ExecutionId => // ignore?
     case Reload(expected) =>
       log.debug(s"Got reload")
       context.become(reloading(client, command, server, expected))
+  }
+
+  private def waitingForInitialBuild(client: ActorRef, command: ScopedKey, server: Option[PlayDevServer], taskId:Option[Long]): Receive = (server, taskId) match {
+    case (Some(s),Some(tid)) =>
+      client ! SbtClientProxy.RequestExecution.ByCommandOrTask(config.notifyServerStartCommand(s.urlString), None, self)
+      waitingForReload(client, command, s)
+    case (_,_) =>
+
+      {
+        case SbtClientProxy.ExecutionId(Success(tid),_) =>
+          context.become(waitingForInitialBuild(client, command, server, Some(tid)))
+        case SbtClientProxy.ExecutionId(Failure(error),_) =>
+          log.error(s"Got failure on initial build -- could not get task ID.  Cannot continue[terminating]: ${error}")
+          exit()
+        case SbtClientProxy.WatchEvent(command, TaskSuccess(result)) =>
+          log.debug(s"Got successful result from initial build: $result")
+          result.value[PlayForkSupportResult] match {
+            case Some(r) =>
+              log.debug("Starting server")
+              val server = config.serverBuilder(r)(runReload(self)_)
+              context.become(waitingForInitialBuild(client, command, Some(server), taskId))
+            case None =>
+              log.error(s"could not decode result into PlayForkSupportResult[terminating]: $result")
+              exit()
+          }
+        case SbtClientProxy.WatchEvent(command, TaskFailure(result)) =>
+          log.error(s"Got failure on initial build.  Cannot continue[terminating]: ${result.stringValue}")
+          exit()
+      }
   }
 
   private def initialBuild(client: ActorRef, command: ScopedKey): Receive = {
@@ -398,20 +438,7 @@ final class ForkRunner(config: ForkRunner.Config) extends Actor with ActorLoggin
       case SbtClientProxy.WatchingTask(_) =>
         log.debug(s"Doing initial build")
         client ! SbtClientProxy.RequestExecution.ByScopedKey(command, None, self)
-      case SbtClientProxy.WatchEvent(command, TaskSuccess(result)) =>
-        log.debug(s"Got successful result from initial build: $result")
-        result.value[PlayForkSupportResult] match {
-          case Some(r) =>
-            log.debug("Starting server")
-            val server = config.serverBuilder(r)(runReload(self)_)
-            context.become(waitingForReload(client, command, server))
-          case None =>
-            log.error(s"could not decode result into PlayForkSupportResult[terminating]: $result")
-            exit()
-        }
-      case SbtClientProxy.WatchEvent(command, TaskFailure(result)) =>
-        log.error(s"Got failure on initial build.  Cannot continue[terminating]: ${result.stringValue}")
-        exit()
+        context.become(waitingForInitialBuild(client, command, None, None))
     }
   }
 

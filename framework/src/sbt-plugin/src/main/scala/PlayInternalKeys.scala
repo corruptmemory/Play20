@@ -10,6 +10,7 @@ import play.runsupport.protocol.PlayForkSupportResult
 trait PlayInternalKeys {
   type ClassLoaderCreator = (String, Array[URL], ClassLoader) => ClassLoader
 
+  val playNotifyServerStart = inputKey[Unit]("Sends an event when the forked dev-server has started")
   val playBackgroundRunTaskBuilder = TaskKey[Seq[String] => BackgroundJobHandle]("play-background-run-task-builder")
   val playDependencyClasspath = TaskKey[Classpath]("play-dependency-classpath")
   val playReloaderClasspath = TaskKey[Classpath]("play-reloader-classpath")

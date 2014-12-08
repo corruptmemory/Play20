@@ -65,6 +65,10 @@ object Serializers {
   implicit val playExceptionWithSourceWrites: Writes[PlayExceptionWithSource] = Json.writes[PlayExceptionWithSource]
   implicit val playExceptionWithSourceFormat: Format[PlayExceptionWithSource] = Format[PlayExceptionWithSource](playExceptionWithSourceReads, playExceptionWithSourceWrites)
 
+  implicit val playServerStartedReads: Reads[PlayServerStarted] = Json.reads[PlayServerStarted]
+  implicit val playServerStartedWrites: Writes[PlayServerStarted] = Json.writes[PlayServerStarted]
+  implicit val playServerStartedFormat: Format[PlayServerStarted] = Format[PlayServerStarted](playServerStartedReads, playServerStartedWrites)
+
   val throwableDeserializers = ThrowableDeserializers.empty
     .add[PlayExceptionWithSource]
     .add[PlayExceptionNoSource]
@@ -73,6 +77,7 @@ object Serializers {
     LocalRegisteredFormat.fromFormat(sourceMapTargetFormat),
     LocalRegisteredFormat.fromFormat(sourceMapformat),
     LocalRegisteredFormat.fromFormat(playExceptionWithSourceFormat),
-    LocalRegisteredFormat.fromFormat(playExceptionNoSourceFormat))
+    LocalRegisteredFormat.fromFormat(playExceptionNoSourceFormat),
+    LocalRegisteredFormat.fromFormat(playServerStartedFormat))
 }
 
