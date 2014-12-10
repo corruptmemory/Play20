@@ -287,13 +287,17 @@ trait PlayRun extends PlayInternalKeys {
 
   def findUnderlyingFailure[T <: Throwable](in: Throwable)(test: Throwable => Option[T]): Option[T] = {
     in match {
-      case null => None
+      case null =>
+      println(s"findUnderlyingFailure: null")
+      None
       case Incomplete(_, _, _, causes, directCause) =>
         (causes.foldLeft[Option[T]](None) {
           case (None, v) => findUnderlyingFailure(v)(test)
           case (x, _) => x
         }) orElse directCause.flatMap(test)
-      case x => test(x) orElse (findUnderlyingFailure(x.getCause)(test))
+      case x =>
+        println(s"findUnderlyingFailure[${x.getClass.getName}]: $x")
+        test(x) orElse (findUnderlyingFailure(x.getCause)(test))
     }
   }
 
@@ -354,13 +358,22 @@ trait PlayRun extends PlayInternalKeys {
     case _ => None
   }
 
+  def findCompileFailed(in: Throwable): Option[CompilationException] =
+    findUnderlyingFailure(in) {
+      case x: compiler.CompileFailed => Some(x)
+      case _ => None
+    } flatMap {
+      _.problems.find(_.severity == xsbti.Severity.Error).map(CompilationException)
+    }
+
   def findInterestingException(in: Throwable): Option[Throwable] =
     findCompilationFailure(in) orElse
-      findUnexpectedException(in) orElse
       findCompilationException(in) orElse
       findTemplateCompilationException(in) orElse
       findRoutesCompilationException(in) orElse
-      findAssetCompilationException(in)
+      findAssetCompilationException(in) orElse
+      findUnexpectedException(in) orElse
+      findCompileFailed(in)
 
   def extractSourceMap(in: sbt.inc.Analysis): Map[String, SourceMapTarget] = {
     in.apis.internal.foldLeft(Map.empty[String, SourceMapTarget]) {
