@@ -26,4 +26,6 @@ class AssetsClassLoader(parent: ClassLoader, assets: Seq[(String, File)]) extend
     val r = name.startsWith(prefix) && (dir / name.substring(prefix.length)).isFile
     r
   }
+
+  override def toString = s"AssetsClassLoader($parent,$assets)"
 }

@@ -4,7 +4,7 @@
 import sbt._
 
 object Dependencies {
-  val sbtRcVersion = "1.0-578454dc9da3c43ecd8e842e6d33c0718a5718ba"
+  val sbtRcVersion = "1.0-b4e30c560b6d83ad5c7ed95170b392d7dc488681"
   // Some common dependencies here so they don't need to be declared over and over
   val specsVersion = "2.3.12"
   val specsBuild = Seq(
@@ -23,7 +23,7 @@ object Dependencies {
 
   val jdbcDeps = Seq(
     "com.jolbox" % "bonecp" % "0.8.0.RELEASE",
-    h2database, 
+    h2database,
     "org.eu.acolyte" % "jdbc-driver" % "1.0.22" % "test",
     "tyrex" % "tyrex" % "1.0.1") ++ specsBuild.map(_ % "test")
 

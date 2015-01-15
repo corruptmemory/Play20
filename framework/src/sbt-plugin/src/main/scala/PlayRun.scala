@@ -37,11 +37,6 @@ trait PlayRun extends PlayInternalKeys {
    */
   val DocsApplication = config("docs").hide
 
-  /**
-   * Configuration for the Play fork-runner dependencies.
-   */
-  val ForkRunner = config("fork-runner").hide
-
   // Regex to match Java System Properties of the format -Dfoo=bar
   private val SystemProperty = "-D([^=]+)=(.*)".r
 
@@ -117,7 +112,7 @@ trait PlayRun extends PlayInternalKeys {
       logger.debug(s"pollDelayMillis: $pollDelayMillis")
       logger.debug(s"args: $args")
 
-      val boostrapClasspath = (forkRunnerClasspath.map(_.data) ++ dependencyClasspath.map(_.data)).toSet.toSeq
+      val boostrapClasspath = forkRunnerClasspath.map(_.data)
       logger.debug(s"boostrapClasspath: $boostrapClasspath")
 
       val runnerOptions = ForkOptions(workingDirectory = Some(projectDirectory),

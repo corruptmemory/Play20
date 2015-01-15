@@ -93,6 +93,15 @@ trait PlaySettings {
     ivyConfigurations += ForkRunner,
     libraryDependencies += "com.typesafe.play" %% "play-docs" % play.core.PlayVersion.current % DocsApplication.name,
     libraryDependencies += "com.typesafe.play" %% "fork-runner" % play.core.PlayVersion.current % ForkRunner.name,
+    playForkedRunnerBootstrapDependencies := {
+      val deps = (Keys.libraryDependencies in Compile).value
+      val frDeps = (Keys.libraryDependencies in ForkRunner).value
+      val r = deps.map(_.copy(configurations = Some(ForkRunner.name))) ++ frDeps
+
+      println(s"compile:playForkedRunnerBootstrapDependencies = $r")
+
+      r
+    },
     manageClasspath(DocsApplication),
     manageClasspath(ForkRunner),
 
@@ -172,21 +181,37 @@ trait PlaySettings {
 
     playVersion := play.core.PlayVersion.current,
 
-    playBackgroundRunTaskBuilder := { javaOptions =>
-      backgroundPlayRunTask(Keys.resolvedScoped.value,
+    playFullBackgroundRunTaskBuilder := backgroundPlayRunTask,
+
+    playBackgroundRunTaskBuilderWithClasspaths := { (javaOptions, forkRunnerClasspath, dependencyClasspath) =>
+      playFullBackgroundRunTaskBuilder.value(Keys.resolvedScoped.value,
         UIKeys.jobService.value,
         (Keys.baseDirectory in ThisBuild).value,
         (Keys.baseDirectory in ThisProject).value,
         Project.extract(Keys.state.value).currentRef,
         javaOptions,
-        (managedClasspath in ForkRunner).value,
-        playDependencyClasspath.value,
+        forkRunnerClasspath,
+        dependencyClasspath,
         playMonitoredFiles.value,
         target.value,
         (managedClasspath in DocsApplication).value,
         playDefaultPort.value,
         pollInterval.value,
         Seq[String]())
+    },
+
+    playForkedRunnerBootstrapClasspath := {
+      val types = classpathTypes.value
+      val report = update.value
+      val projectDir = (Keys.baseDirectory in ThisProject).value
+
+      Classpaths.managedJars(ForkRunner, types, report) :+ Attributed.blank(projectDir / "conf/application.conf")
+    },
+
+    playBackgroundRunTaskBuilder := { javaOptions =>
+      playBackgroundRunTaskBuilderWithClasspaths.value(javaOptions,
+        playForkedRunnerBootstrapClasspath.value,
+        playDependencyClasspath.value)
     },
 
     // all dependencies from outside the project (all dependency jars)
