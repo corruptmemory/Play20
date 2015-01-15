@@ -181,9 +181,11 @@ trait PlaySettings {
 
     playVersion := play.core.PlayVersion.current,
 
+    playForkedRunnerTaskName := {"play-default-fork-run-support"},
+
     playFullBackgroundRunTaskBuilder := backgroundPlayRunTask,
 
-    playBackgroundRunTaskBuilderWithClasspaths := { (javaOptions, forkRunnerClasspath, dependencyClasspath) =>
+    playBackgroundRunTaskBuilderWithClasspaths := { (javaOptions, forkRunnerClasspath, dependencyClasspath, taskName) =>
       playFullBackgroundRunTaskBuilder.value(Keys.resolvedScoped.value,
         UIKeys.jobService.value,
         (Keys.baseDirectory in ThisBuild).value,
@@ -197,6 +199,7 @@ trait PlaySettings {
         (managedClasspath in DocsApplication).value,
         playDefaultPort.value,
         pollInterval.value,
+        taskName,
         Seq[String]())
     },
 
@@ -211,7 +214,8 @@ trait PlaySettings {
     playBackgroundRunTaskBuilder := { javaOptions =>
       playBackgroundRunTaskBuilderWithClasspaths.value(javaOptions,
         playForkedRunnerBootstrapClasspath.value,
-        playDependencyClasspath.value)
+        playDependencyClasspath.value,
+        playForkedRunnerTaskName.value)
     },
 
     // all dependencies from outside the project (all dependency jars)

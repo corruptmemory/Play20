@@ -16,11 +16,12 @@ trait PlayInternalKeys {
   val ForkRunner = config("fork-runner").hide
 
   val playNotifyServerStart = inputKey[Unit]("Sends an event when the forked dev-server has started")
-  val playFullBackgroundRunTaskBuilder = TaskKey[(ScopedKey[_], BackgroundJobService, File, File, ProjectRef, Seq[String], Classpath, Classpath, Seq[String], File, Classpath, Int, Int, Seq[String]) => BackgroundJobHandle]("play-full-background-run-task-builder")
-  val playBackgroundRunTaskBuilderWithClasspaths = TaskKey[(Seq[String],Classpath,Classpath) => BackgroundJobHandle]("play-background-run-task-builder-with-classpaths")
+  val playFullBackgroundRunTaskBuilder = TaskKey[(ScopedKey[_], BackgroundJobService, File, File, ProjectRef, Seq[String], Classpath, Classpath, Seq[String], File, Classpath, Int, Int, String, Seq[String]) => BackgroundJobHandle]("play-full-background-run-task-builder")
+  val playBackgroundRunTaskBuilderWithClasspaths = TaskKey[(Seq[String],Classpath,Classpath,String) => BackgroundJobHandle]("play-background-run-task-builder-with-classpaths")
   val playBackgroundRunTaskBuilder = TaskKey[Seq[String] => BackgroundJobHandle]("play-background-run-task-builder")
   val playForkedRunnerBootstrapDependencies = SettingKey[Seq[ModuleID]]("play-forked-runner-bootstrap-dependencies")
   val playForkedRunnerBootstrapClasspath = TaskKey[Classpath]("play-forked-runner-bootstrap-classpath")
+  val playForkedRunnerTaskName = TaskKey[String]("play-forked-runner-task-name")
   val playDependencyClasspath = TaskKey[Classpath]("play-dependency-classpath")
   val playReloaderClasspath = TaskKey[Classpath]("play-reloader-classpath")
   val playCommonClassloader = TaskKey[ClassLoader]("play-common-classloader")

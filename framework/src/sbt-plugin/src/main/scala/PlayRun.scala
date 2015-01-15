@@ -96,6 +96,7 @@ trait PlayRun extends PlayInternalKeys {
     docsClasspath: Classpath,
     defaultHttpPort: Int,
     pollDelayMillis: Int,
+    taskName:String,
     args: Seq[String]): Runnable = new Runnable {
 
     def run(): Unit = {
@@ -110,6 +111,7 @@ trait PlayRun extends PlayInternalKeys {
       logger.debug(s"docsClasspath: $docsClasspath")
       logger.debug(s"defaultHttpPort: $defaultHttpPort")
       logger.debug(s"pollDelayMillis: $pollDelayMillis")
+      logger.debug(s"taskName: $taskName")
       logger.debug(s"args: $args")
 
       val boostrapClasspath = forkRunnerClasspath.map(_.data)
@@ -122,7 +124,7 @@ trait PlayRun extends PlayInternalKeys {
       val buildUriString = projectRef.build.toString
       val project = projectRef.project
 
-      runner.run("play.forkrunner.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString), logger)
+      runner.run("play.forkrunner.ForkRunner", boostrapClasspath, Seq(baseDirectoryString, buildUriString, targetDirectory.getAbsolutePath, project, defaultHttpPort.toString, "-", pollDelayMillis.toString, taskName) ++ args, logger)
     }
   }
 
@@ -138,6 +140,7 @@ trait PlayRun extends PlayInternalKeys {
     docsClasspath: Classpath,
     defaultHttpPort: Int,
     pollDelayMillis: Int,
+    taskName:String,
     args: Seq[String]): Unit = {
     val runnable = buildPlayRunForkedRunnable(logger,
       baseDirectory,
@@ -151,6 +154,7 @@ trait PlayRun extends PlayInternalKeys {
       docsClasspath,
       defaultHttpPort,
       pollDelayMillis,
+      taskName,
       args)
     runnable.run()
   }
@@ -168,6 +172,7 @@ trait PlayRun extends PlayInternalKeys {
     docsClasspath: Classpath,
     defaultHttpPort: Int,
     pollDelayMillis: Int,
+    taskName:String,
     args: Seq[String]): BackgroundJobHandle = {
 
     jobService.runInBackgroundThread(resolvedScope, { (logger, uiContext) =>
@@ -184,6 +189,7 @@ trait PlayRun extends PlayInternalKeys {
         docsClasspath,
         defaultHttpPort,
         pollDelayMillis,
+        taskName,
         args)
     })
   }
@@ -221,6 +227,7 @@ trait PlayRun extends PlayInternalKeys {
         (managedClasspath in DocsApplication).value,
         playDefaultPort.value,
         pollInterval.value,
+        playForkedRunnerTaskName.value,
         args
       )
     } else {

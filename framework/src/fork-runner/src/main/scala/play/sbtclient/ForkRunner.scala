@@ -251,6 +251,7 @@ object ForkRunner {
     val httpPort: Option[Int] = Int.unapply(args(4))
     val httpsPort: Option[Int] = Int.unapply(args(5))
     val pollDelayMillis: Int = args(6).toInt
+    val taskName:String = args(7)
     val akkaConfig = AkkaConfig.config(new File(baseDirectoryString))
     val buildUri = new URI(buildUriString)
 
@@ -270,7 +271,7 @@ object ForkRunner {
     val projectDir = new File(baseDirectoryString)
     val conn = SbtConnector("play-fork", "play-fork", projectDir)
     val serverBuilder = runServer(httpPort, httpsPort, new File(buildUri), new File(targetDirectory), pollDelayMillis, wrapLogger(log))_
-    val config = Config(conn, latch, s"$project/play-default-fork-run-support", projectDir, buildUri, project, serverBuilder)
+    val config = Config(conn, latch, s"$project/$taskName", projectDir, buildUri, project, serverBuilder)
     val runner = system.actorOf(Props(new ForkRunner(config)))
     log.debug("Awaiting ForkRunner shutdown")
     latch.await()
